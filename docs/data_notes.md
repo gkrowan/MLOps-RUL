@@ -49,9 +49,45 @@ files in `Test_set` vs 2375 in `Validation_Set` → 573 files / 5730s of RUL was
    raw release, not a naming mismatch — the loader returns an empty (but correctly-shaped)
    DataFrame for these.
 
+## RUL labeling scheme (decided)
+
+Raw time-to-failure in seconds: `RUL(file_index) = (total_snapshots_in_full_run − file_index) × 10`.
+Chosen over a 0–1 life-percentage scheme because it matches the units the scoring metrics
+(RMSE + PHM12 asymmetric scoring) actually operate on. Percentage-of-life labels would need a
+separate estimate of a test bearing's total lifespan to convert back to seconds at inference
+time — which is exactly the unknown the challenge is asking us to predict — so they don't map
+cleanly onto the eval metric. Implemented in `femto_rul.labeling.rul`:
+- `label_full_run_bearing(bearing_dir)` — for `Training_set` bearings and `Validation_Set`
+  bearings considered on their own (both are full runs, so total length is just the bearing's
+  own file count).
+- `label_truncated_bearing(test_bearing_dir, validation_bearing_dir)` — for `Test_set` bearings,
+  using the matching `Validation_Set` bearing for the true total run length.
+
+Not yet implemented: a piecewise/capped RUL (flat ceiling during the healthy-life region, where
+the vibration signature carries no degradation signal to learn from). Worth revisiting if
+baseline RMSE is dominated by early-life predictions.
+
+## Feature extraction schema (decided)
+
+One row per `(split, bearing, file_index)` snapshot. Implemented in `femto_rul.pipeline`
+(`build_bearing_dataset` / `build_full_dataset`). Columns:
+
+- Metadata: `split`, `condition`, `bearing`, `elapsed_time_seconds`, `file_index`
+- Per channel (`_horiz` / `_vert` suffix) — time domain (`femto_rul.features.time_domain`):
+  `rms`, `kurtosis` (excess/Fisher, Gaussian ≈ 0), `skewness`, `crest_factor`
+- Per channel — frequency domain (`femto_rul.features.frequency_domain`): `fft_band_0`..`fft_band_7`,
+  8 equal-width bins from 0Hz to the 12.8kHz Nyquist frequency. Chose generic equal-width bins
+  over bearing-fault-frequency-targeted bins (BPFO/BPFI/BSF/FTF) since the latter needs the
+  PRONOSTIA bearing geometry spec verified first — worth revisiting as a stretch goal.
+- Label: `rul_seconds`
+
+This is the schema to hand off to Person B's orchestrator — 30 columns total (5 metadata + 24
+feature + 1 label). Run `python scripts/extract_features.py` to regenerate
+`data/processed/features.parquet` (gitignored, ~20min single-threaded over the full dataset).
+
 ## Open decisions (not yet made — flag here once decided)
 
-- [ ] RUL labeling scheme: life-percentage vs. raw time-to-failure (seconds/cycles)
-- [ ] Feature extraction schema (column names/types/units) to hand off to Person B's orchestrator
 - [ ] Bearing-level train/test split strategy within `Training_set` for local validation
       (separate from the official `Test_set`/`Validation_Set` held-out bearings)
+- [ ] Whether to add a piecewise/capped RUL label for the healthy-life region
+- [ ] Whether to pursue bearing-fault-frequency-targeted FFT bins (needs geometry spec lookup)

@@ -7,6 +7,7 @@ scikit-learn==1.9.0
 matplotlib==3.11.1
 jupyter==1.1.1
 pytest==9.1.1
+pyarrow==25.0.0
 
 # install this repo's own package (src/femto_rul) in editable mode
 -e .

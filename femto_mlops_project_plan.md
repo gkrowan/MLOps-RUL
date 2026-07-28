@@ -7,12 +7,12 @@
 The four MLOps lifecycle stages in the project brief map naturally onto four owners. Each person leads one stage end-to-end but stays involved in integration points with neighboring stages — this isn't a "build in isolation" split, since each stage's output is the next stage's input.
 
 
-| Role                        | Owns                                                               | Also collaborates on                                             |
-| --------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| **A — Data & Features**     | Ingestion, RUL labeling, feature extraction, EDA, train/test split | Feeds format/schema to Person B's orchestrator                   |
-| **B — Pipeline & Tracking** | Airflow/Prefect DAG, MLflow experiment tracking, model registry    | Consumes A's feature pipeline, hands registered model to C       |
-| **C — Deployment**          | Docker + FastAPI inference service                                 | Consumes B's registered model, hands live endpoint to D          |
-| **D — Monitoring & Drift**  | EvidentlyAI dashboard, drift simulation, anomaly verification      | Hits C's live endpoint, owns final documentation/slides assembly |
+| Role                            | Owns                                                               | Also collaborates on                                             |
+| ------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| **A — Data & Features (Grace)** | Ingestion, RUL labeling, feature extraction, EDA, train/test split | Feeds format/schema to Person B's orchestrator                   |
+| **B — Pipeline & Tracking**     | Airflow/Prefect DAG, MLflow experiment tracking, model registry    | Consumes A's feature pipeline, hands registered model to C       |
+| **C — Deployment**              | Docker + FastAPI inference service                                 | Consumes B's registered model, hands live endpoint to D          |
+| **D — Monitoring & Drift**      | EvidentlyAI dashboard, drift simulation, anomaly verification      | Hits C's live endpoint, owns final documentation/slides assembly |
 
 
 ---

@@ -17,7 +17,7 @@ from femto_rul.config import ACC_COLUMNS, TEMP_COLUMNS
 FILE_INDEX_RE = re.compile(r"_(\d+)\.csv$")
 
 
-def _file_index(path: Path) -> int:
+def file_index(path: Path) -> int:
     match = FILE_INDEX_RE.search(path.name)
     if not match:
         raise ValueError(f"unexpected filename, can't parse index: {path.name}")
@@ -47,7 +47,7 @@ def list_bearing_files(bearing_dir: Path, kind: str) -> list[Path]:
     """
     if kind not in ("acc", "temp"):
         raise ValueError(f"kind must be 'acc' or 'temp', got {kind!r}")
-    return sorted(bearing_dir.glob(f"{kind}_*.csv"), key=_file_index)
+    return sorted(bearing_dir.glob(f"{kind}_*.csv"), key=file_index)
 
 
 def load_bearing_acc(bearing_dir: Path) -> pd.DataFrame:
@@ -56,7 +56,7 @@ def load_bearing_acc(bearing_dir: Path) -> pd.DataFrame:
     frames = []
     for path in list_bearing_files(bearing_dir, "acc"):
         df = load_acc_file(path)
-        df.insert(0, "file_index", _file_index(path))
+        df.insert(0, "file_index", file_index(path))
         frames.append(df)
     return pd.concat(frames, ignore_index=True)
 
@@ -67,7 +67,7 @@ def load_bearing_temp(bearing_dir: Path) -> pd.DataFrame:
     frames = []
     for path in list_bearing_files(bearing_dir, "temp"):
         df = load_temp_file(path)
-        df.insert(0, "file_index", _file_index(path))
+        df.insert(0, "file_index", file_index(path))
         frames.append(df)
     if not frames:
         return pd.DataFrame(columns=["file_index", *TEMP_COLUMNS])
