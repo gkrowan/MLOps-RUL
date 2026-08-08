@@ -19,6 +19,9 @@ chmod +x scripts/generate_oracle_env.sh
 Record the generated passwords from `.env` in a password manager. Never commit
 that file or paste it into an issue, chat, or notebook.
 
+The generated `AIRFLOW_UID` makes the Airflow containers write bind-mounted logs
+as the Ubuntu user instead of container root.
+
 ## 2. Start the services
 
 ```bash
@@ -64,3 +67,21 @@ docker compose -f docker-compose.yml -f docker-compose.oracle.yml down
 
 Do not add `-v` unless permanently deleting all local databases and artifacts is
 intentional.
+
+## Recover from an Airflow init permission failure
+
+If the deployment was first started without `AIRFLOW_UID`, keep the existing
+`.env` secrets and add the host UID:
+
+```bash
+cd ~/MLOps-RUL
+grep -q '^AIRFLOW_UID=' .env || echo "AIRFLOW_UID=$(id -u)" >> .env
+mkdir -p airflow/logs artifacts
+sudo chown -R "$(id -u):$(id -g)" airflow/logs artifacts
+docker compose -f docker-compose.yml -f docker-compose.oracle.yml down
+docker compose -f docker-compose.yml -f docker-compose.oracle.yml up --build -d
+docker compose -f docker-compose.yml -f docker-compose.oracle.yml ps
+```
+
+This does not remove named volumes. PostgreSQL, MLflow, MinIO, and Grafana data
+remain intact.

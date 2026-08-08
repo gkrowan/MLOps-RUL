@@ -20,6 +20,7 @@ BIND_ADDRESS=127.0.0.1
 POSTGRES_USER=mlops
 POSTGRES_PASSWORD=$(random_secret)
 AIRFLOW_SECRET_KEY=$(random_secret)
+AIRFLOW_UID=$(id -u)
 AIRFLOW_ADMIN_USER=admin
 AIRFLOW_ADMIN_PASSWORD=$(random_secret)
 MLFLOW_ARTIFACT_BUCKET=mlflow
@@ -30,4 +31,5 @@ GRAFANA_ADMIN_PASSWORD=$(random_secret)
 EOF
 
 chmod 600 .env
+mkdir -p airflow/logs artifacts
 echo "Created .env with random secrets. Keep it private and back it up securely."

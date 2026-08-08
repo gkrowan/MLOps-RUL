@@ -2,6 +2,7 @@ name: femto-rul-mlops
 
 x-airflow-common: &airflow-common
   image: femto-rul-airflow:local
+  user: "${AIRFLOW_UID:-50000}:0"
   build:
     context: .
     dockerfile: docker/airflow/Dockerfile
