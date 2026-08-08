@@ -1,6 +1,7 @@
 name: femto-rul-mlops
 
 x-airflow-common: &airflow-common
+  image: femto-rul-airflow:local
   build:
     context: .
     dockerfile: docker/airflow/Dockerfile
