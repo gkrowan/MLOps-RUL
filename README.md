@@ -84,3 +84,10 @@ docker compose down -v  # also removes local service databases and artifacts
 The exposed passwords and ports are development defaults only. Replace them with
 managed secrets, private networking, TLS, and managed databases/object storage
 before deploying this stack to a cloud environment.
+
+## Oracle Cloud
+
+The Ubuntu ARM64 deployment uses the same images with a resource-limited Compose
+override, generated secrets, persistent named volumes, and localhost-only web
+ports accessed through SSH tunnels. Follow
+[docs/oracle_deployment.md](docs/oracle_deployment.md).

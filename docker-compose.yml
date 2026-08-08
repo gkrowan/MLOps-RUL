@@ -10,7 +10,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-mlops}:${POSTGRES_PASSWORD:-mlops-local}@postgres:5432/airflow
-    AIRFLOW__WEBSERVER__SECRET_KEY: local-airflow-secret-key
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-local-airflow-secret-key}
     MLFLOW_TRACKING_URI: http://mlflow:5000
   volumes:
     - ./airflow/dags:/opt/airflow/dags
@@ -47,7 +47,7 @@ services:
     volumes:
       - minio-data:/data
     ports:
-      - "9001:9001"
+      - "${BIND_ADDRESS:-127.0.0.1}:9001:9001"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
@@ -78,7 +78,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio-local}
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
     ports:
-      - "5000:5000"
+      - "${BIND_ADDRESS:-127.0.0.1}:5000:5000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,7 +106,7 @@ services:
     <<: *airflow-common
     command: webserver
     ports:
-      - "8080:8080"
+      - "${BIND_ADDRESS:-127.0.0.1}:8080:8080"
     depends_on:
       airflow-init:
         condition: service_completed_successfully
@@ -140,7 +140,7 @@ services:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
-      - "3000:3000"
+      - "${BIND_ADDRESS:-127.0.0.1}:3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
