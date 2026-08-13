@@ -1,31 +1,32 @@
-"""Verify integrity of the raw FEMTO/PRONOSTIA bearing dataset under data/.
+"""Verify integrity of the FEMTO/PRONOSTIA bearing dataset.
 
-Checks, per bearing directory:
-  - acc_*.csv / temp_*.csv files are sequentially numbered starting at 1 (no gaps/dupes)
-  - every acc_*.csv has the expected row count (2560) and column count (6)
-  - every temp_*.csv has the expected row count (600) and column count (5)
-    (a handful of temp files are genuinely short — the sensor's first read of a
-    run sometimes captures fewer than 600 samples; these are reported, not
-    treated as corruption, since Test_set and Validation_Set agree on them)
-  - no unreadable / empty files
-  - flags any stray files that aren't acc_*.csv or temp_*.csv
+The verifier distinguishes between:
 
-Known upstream quirk this script accounts for: the delimiter is NOT uniform
-across the dataset. Most files are comma-delimited, but some bearings ship
-their acc_*.csv and/or temp_*.csv as semicolon-delimited instead — and the
-choice can differ between Test_set and Validation_Set copies of the *same*
-bearing (e.g. Bearing1_4). It is consistent within a single (bearing, file
-type) though: we never observed a mid-run switch. The delimiter is
-autodetected per file rather than assumed, and usage is reported per bearing
-so the ingestion loader knows to do the same.
+CRITICAL issues
+---------------
+- missing required dataset split directories
+- no bearing directories
+- malformed / short / ragged acceleration snapshots
+- acceleration file-numbering gaps
+- invalid bearing directory names
+- Test_set / Validation_Set truncation mismatches
 
-Also cross-checks Test_set bearings against Validation_Set: Test_set is
-expected to be a truncated PREFIX of Validation_Set (the full run-to-failure
-ground truth released after the PHM12 challenge for scoring), so this reports
-the truncation point per bearing — i.e. the RUL held out for that test
-bearing.
+WARNINGS
+--------
+- temperature file-numbering gaps
+- partial / short temperature chunks
+- stray non-dataset files
 
-Usage: python scripts/verify_data.py [--data-dir data]
+Temperature is warning-only by default because Feature Set V1 is vibration-only.
+Use --strict-temperature if temperature is later promoted to a model feature.
+
+Delimiter differences are informational because the released dataset legitimately
+contains both comma- and semicolon-delimited files.
+
+Usage:
+    python scripts/verify_data.py
+    python scripts/verify_data.py --data-dir data/raw
+    python scripts/verify_data.py --strict-temperature
 """
 
 from __future__ import annotations
@@ -36,10 +37,20 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-ACC_EXPECTED_ROWS = 2560
-ACC_EXPECTED_COLS = 6
-TEMP_EXPECTED_ROWS = 600
-TEMP_EXPECTED_COLS = 5
+from femto_rul.config import (
+    ACC_COLUMNS,
+    ACC_SAMPLES_PER_FILE,
+    EXTRACTED_DATA_DIR,
+    FILE_INTERVAL_SECONDS,
+    TEMP_COLUMNS,
+    TEMP_SAMPLES_PER_FILE,
+)
+
+ACC_EXPECTED_ROWS = ACC_SAMPLES_PER_FILE
+ACC_EXPECTED_COLS = len(ACC_COLUMNS)
+
+TEMP_EXPECTED_ROWS = TEMP_SAMPLES_PER_FILE
+TEMP_EXPECTED_COLS = len(TEMP_COLUMNS)
 
 BEARING_DIR_RE = re.compile(r"^Bearing(\d+)_(\d+)$")
 FILE_RE = re.compile(r"^(acc|temp)_(\d+)\.csv$")
@@ -50,7 +61,7 @@ class FileStat:
     name: str
     delimiter: str
     row_count: int
-    col_counts: set[int]  # distinct column counts seen (first/middle/last line)
+    col_counts: set[int]
 
 
 @dataclass
@@ -84,202 +95,522 @@ def stat_file(path: Path) -> FileStat:
     lines = read_lines(path)
     row_count = len(lines)
     if row_count == 0:
-        return FileStat(path.name, delimiter="?", row_count=0, col_counts=set())
+        return FileStat(
+            path.name,
+            delimiter="?",
+            row_count=0,
+            col_counts=set(),
+        )
 
     first = lines[0]
     delimiter = ";" if b";" in first else ","
     sample_idx = {0, row_count // 2, row_count - 1}
-    col_counts = {lines[i].count(delimiter.encode()) + 1 for i in sample_idx}
-    return FileStat(path.name, delimiter=delimiter, row_count=row_count, col_counts=col_counts)
+    col_counts = {
+        lines[i].count(delimiter.encode()) + 1
+        for i in sample_idx
+    }
+
+    return FileStat(
+        path.name,
+        delimiter=delimiter,
+        row_count=row_count,
+        col_counts=col_counts,
+    )
 
 
-def verify_bearing_dir(split: str, bearing_dir: Path) -> tuple[BearingReport, list[str]]:
-    m = BEARING_DIR_RE.match(bearing_dir.name)
-    condition = int(m.group(1)) if m else -1
-    report = BearingReport(split=split, name=bearing_dir.name, condition=condition)
+def verify_bearing_dir(
+    split: str,
+    bearing_dir: Path,
+) -> tuple[BearingReport, list[str]]:
+    match = BEARING_DIR_RE.match(bearing_dir.name)
+    condition = int(match.group(1)) if match else -1
+
+    report = BearingReport(
+        split=split,
+        name=bearing_dir.name,
+        condition=condition,
+    )
+
     stray_files: list[str] = []
+    acc_nums: list[int] = []
+    temp_nums: list[int] = []
 
-    acc_nums, temp_nums = [], []
-    for f in sorted(bearing_dir.iterdir()):
-        if not f.is_file():
+    for file_path in sorted(bearing_dir.iterdir()):
+        if not file_path.is_file():
             continue
-        fm = FILE_RE.match(f.name)
-        if not fm:
-            stray_files.append(str(f))
+
+        file_match = FILE_RE.match(file_path.name)
+        if not file_match:
+            stray_files.append(str(file_path))
             continue
-        kind, num = fm.group(1), int(fm.group(2))
-        stat = stat_file(f)
+
+        kind = file_match.group(1)
+        number = int(file_match.group(2))
+        stat = stat_file(file_path)
+
         if kind == "acc":
-            acc_nums.append(num)
+            acc_nums.append(number)
             report.acc_files.append(stat)
         else:
-            temp_nums.append(num)
+            temp_nums.append(number)
             report.temp_files.append(stat)
 
     report.acc_gaps = find_gaps(acc_nums)
     report.temp_gaps = find_gaps(temp_nums)
+
     return report, stray_files
 
 
-def summarize_shape_issues(files: list[FileStat], expected_rows: int, expected_cols: int) -> list[str]:
-    issues = []
-    for f in files:
-        if len(f.col_counts) > 1:
-            issues.append(f"{f.name}: ragged — column counts differ within file {sorted(f.col_counts)}")
+def summarize_shape_issues(
+    files: list[FileStat],
+    expected_rows: int,
+    expected_cols: int,
+) -> list[str]:
+    issues: list[str] = []
+
+    for file_stat in files:
+        if len(file_stat.col_counts) > 1:
+            issues.append(
+                f"{file_stat.name}: ragged — column counts differ "
+                f"within file {sorted(file_stat.col_counts)}"
+            )
             continue
-        cols = next(iter(f.col_counts)) if f.col_counts else 0
-        if f.row_count != expected_rows or cols != expected_cols:
-            issues.append(f"{f.name}: shape {f.row_count}x{cols} (expected {expected_rows}x{expected_cols})")
+
+        cols = (
+            next(iter(file_stat.col_counts))
+            if file_stat.col_counts
+            else 0
+        )
+
+        if (
+            file_stat.row_count != expected_rows
+            or cols != expected_cols
+        ):
+            issues.append(
+                f"{file_stat.name}: shape "
+                f"{file_stat.row_count}x{cols} "
+                f"(expected {expected_rows}x{expected_cols})"
+            )
+
     return issues
 
 
 def delimiter_summary(files: list[FileStat]) -> str | None:
     if not files:
         return None
-    delims = {f.delimiter for f in files}
-    if delims == {","}:
+
+    delimiters = {file_stat.delimiter for file_stat in files}
+
+    if delimiters == {","}:
         return None
+
     counts = defaultdict(int)
-    for f in files:
-        counts[f.delimiter] += 1
-    return ", ".join(f"{n} file(s) use '{d}'" for d, n in sorted(counts.items()))
+
+    for file_stat in files:
+        counts[file_stat.delimiter] += 1
+
+    return ", ".join(
+        f"{count} file(s) use '{delimiter}'"
+        for delimiter, count in sorted(counts.items())
+    )
 
 
 def parse_row(line: bytes, delimiter: str) -> list[float]:
-    return [float(x) for x in line.split(delimiter.encode())]
+    return [
+        float(value)
+        for value in line.split(delimiter.encode())
+    ]
 
 
-def check_test_is_prefix_of_validation(data_dir: Path, tolerance: float = 1e-6) -> list[str]:
-    """Test_set bearings should be a truncated PREFIX of the matching
-    Validation_Set bearing (the released ground-truth full run). Compares
-    parsed numeric values rather than raw bytes, since the two releases can
-    use different delimiters for the same bearing (e.g. Bearing1_4)."""
-    notes = []
+def check_test_is_prefix_of_validation(
+    data_dir: Path,
+    tolerance: float = 1e-6,
+) -> tuple[list[str], list[str]]:
+    """Return (informational notes, critical mismatch messages)."""
+
+    notes: list[str] = []
+    critical: list[str] = []
+
     test_dir = data_dir / "Test_set"
-    val_dir = data_dir / "Validation_Set"
-    if not (test_dir.is_dir() and val_dir.is_dir()):
-        return notes
+    validation_dir = data_dir / "Validation_Set"
 
-    for bearing in sorted(d.name for d in test_dir.iterdir() if d.is_dir()):
-        val_bearing = val_dir / bearing
+    if not (
+        test_dir.is_dir()
+        and validation_dir.is_dir()
+    ):
+        return notes, critical
+
+    test_bearings = sorted(
+        directory.name
+        for directory in test_dir.iterdir()
+        if directory.is_dir()
+    )
+
+    for bearing in test_bearings:
         test_bearing = test_dir / bearing
-        if not val_bearing.is_dir():
-            notes.append(f"{bearing}: in Test_set but no matching Validation_Set dir")
+        validation_bearing = validation_dir / bearing
+
+        if not validation_bearing.is_dir():
+            message = (
+                f"{bearing}: in Test_set but no matching "
+                "Validation_Set directory"
+            )
+            notes.append(f"{message} [MISMATCH]")
+            critical.append(message)
             continue
 
         test_acc = sorted(test_bearing.glob("acc_*.csv"))
-        val_acc = sorted(val_bearing.glob("acc_*.csv"))
-        if len(test_acc) >= len(val_acc):
-            notes.append(
-                f"{bearing}: Test_set has {len(test_acc)} acc files, "
-                f"Validation_Set has {len(val_acc)} — expected Test_set to be strictly shorter"
+        validation_acc = sorted(
+            validation_bearing.glob("acc_*.csv")
+        )
+
+        if not test_acc or not validation_acc:
+            message = (
+                f"{bearing}: missing acceleration snapshots "
+                "in Test_set or Validation_Set"
             )
+            notes.append(f"{message} [MISMATCH]")
+            critical.append(message)
             continue
 
-        def matches(test_path: Path, val_path: Path) -> bool:
-            t_lines, v_lines = read_lines(test_path), read_lines(val_path)
-            if len(t_lines) != len(v_lines):
+        if len(test_acc) >= len(validation_acc):
+            message = (
+                f"{bearing}: Test_set has {len(test_acc)} acc files, "
+                f"Validation_Set has {len(validation_acc)} — "
+                "expected Test_set to be strictly shorter"
+            )
+            notes.append(f"{message} [MISMATCH]")
+            critical.append(message)
+            continue
+
+        def matches(
+            test_path: Path,
+            validation_path: Path,
+        ) -> bool:
+            test_lines = read_lines(test_path)
+            validation_lines = read_lines(validation_path)
+
+            if len(test_lines) != len(validation_lines):
                 return False
-            t_delim = ";" if b";" in t_lines[0] else ","
-            v_delim = ";" if b";" in v_lines[0] else ","
-            for t_line, v_line in zip(t_lines[::len(t_lines) // 5 or 1], v_lines[::len(v_lines) // 5 or 1]):
+
+            if not test_lines or not validation_lines:
+                return False
+
+            test_delimiter = (
+                ";" if b";" in test_lines[0] else ","
+            )
+            validation_delimiter = (
+                ";" if b";" in validation_lines[0] else ","
+            )
+
+            stride = max(len(test_lines) // 5, 1)
+
+            for test_line, validation_line in zip(
+                test_lines[::stride],
+                validation_lines[::stride],
+            ):
+                test_values = parse_row(
+                    test_line,
+                    test_delimiter,
+                )
+                validation_values = parse_row(
+                    validation_line,
+                    validation_delimiter,
+                )
+
+                if len(test_values) != len(validation_values):
+                    return False
+
                 if any(
-                    abs(a - b) > tolerance
-                    for a, b in zip(parse_row(t_line, t_delim), parse_row(v_line, v_delim))
+                    abs(test_value - validation_value) > tolerance
+                    for test_value, validation_value in zip(
+                        test_values,
+                        validation_values,
+                    )
                 ):
                     return False
+
             return True
 
-        first_match = matches(test_acc[0], val_acc[0])
-        last_shared_idx = len(test_acc) - 1
-        last_match = matches(test_acc[last_shared_idx], val_acc[last_shared_idx])
-        status = "OK" if (first_match and last_match) else "MISMATCH"
-        hidden = len(val_acc) - len(test_acc)
-        notes.append(
-            f"{bearing}: truncated at {len(test_acc)}/{len(val_acc)} acc files "
-            f"({hidden} files / ~{hidden * 10}s of run held out as RUL ground truth) [{status}]"
+        first_match = matches(
+            test_acc[0],
+            validation_acc[0],
         )
-    return notes
+
+        last_shared_index = len(test_acc) - 1
+
+        last_match = matches(
+            test_acc[last_shared_index],
+            validation_acc[last_shared_index],
+        )
+
+        is_match = first_match and last_match
+
+        hidden_files = (
+            len(validation_acc) - len(test_acc)
+        )
+
+        held_out_seconds = (
+            hidden_files * FILE_INTERVAL_SECONDS
+        )
+
+        status = "OK" if is_match else "MISMATCH"
+
+        notes.append(
+            f"{bearing}: truncated at "
+            f"{len(test_acc)}/{len(validation_acc)} acc files "
+            f"({hidden_files} files / "
+            f"~{held_out_seconds}s of run held out "
+            f"as RUL ground truth) [{status}]"
+        )
+
+        if not is_match:
+            critical.append(
+                f"{bearing}: Test_set is not a numeric prefix "
+                "of Validation_Set"
+            )
+
+    return notes, critical
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data-dir", default="data")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Verify integrity of extracted FEMTO/PRONOSTIA data."
+        )
+    )
+
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=EXTRACTED_DATA_DIR,
+        help=(
+            "Parent directory containing Training_set, "
+            "Validation_Set and Test_set. "
+            f"Default from config: {EXTRACTED_DATA_DIR}"
+        ),
+    )
+
+    parser.add_argument(
+        "--strict-temperature",
+        action="store_true",
+        help=(
+            "Treat temperature gaps/shape differences as critical. "
+            "By default they are warnings because Feature Set V1 "
+            "does not use temperature."
+        ),
+    )
+
     args = parser.parse_args()
+    data_dir = args.data_dir.resolve()
 
-    data_dir = Path(args.data_dir)
     if not data_dir.is_dir():
-        raise SystemExit(f"data dir not found: {data_dir}")
+        raise SystemExit(
+            f"Configured data directory does not exist: {data_dir}"
+        )
 
-    splits = ["Training_set", "Validation_Set", "Test_set"]
+    splits = [
+        "Training_set",
+        "Validation_Set",
+        "Test_set",
+    ]
+
+    missing_splits = [
+        split
+        for split in splits
+        if not (data_dir / split).is_dir()
+    ]
+
+    if missing_splits:
+        print("=" * 70)
+        print("FEMTO data verification FAILED")
+        print("=" * 70)
+        print(f"Configured data directory: {data_dir}")
+        print()
+        print("Missing required split directories:")
+
+        for split in missing_splits:
+            print(f"  - {data_dir / split}")
+
+        raise SystemExit(1)
+
     all_reports: list[BearingReport] = []
     all_strays: list[str] = []
 
     for split in splits:
         split_dir = data_dir / split
-        if not split_dir.is_dir():
-            print(f"[!] missing expected split dir: {split}")
-            continue
+
         for bearing_dir in sorted(split_dir.iterdir()):
             if not bearing_dir.is_dir():
                 continue
-            report, strays = verify_bearing_dir(split, bearing_dir)
+
+            report, strays = verify_bearing_dir(
+                split,
+                bearing_dir,
+            )
+
             all_reports.append(report)
             all_strays.extend(strays)
+
+    if not all_reports:
+        raise SystemExit(
+            f"No bearing directories found under {data_dir}"
+        )
 
     print("=" * 70)
     print("FEMTO data verification report")
     print("=" * 70)
+    print(f"Data directory: {data_dir}")
 
     by_split = defaultdict(list)
-    for r in all_reports:
-        by_split[r.split].append(r)
 
-    total_shape_issues = 0
-    delimiter_notes = []
+    for report in all_reports:
+        by_split[report.split].append(report)
+
+    critical_issues: list[str] = []
+    warning_issues: list[str] = []
+    delimiter_notes: list[str] = []
+
     for split in splits:
         reports = by_split.get(split, [])
+
         if not reports:
-            continue
-        print(f"\n{split}: {len(reports)} bearings")
-        for r in reports:
-            acc_issues = summarize_shape_issues(r.acc_files, ACC_EXPECTED_ROWS, ACC_EXPECTED_COLS)
-            temp_issues = summarize_shape_issues(r.temp_files, TEMP_EXPECTED_ROWS, TEMP_EXPECTED_COLS)
-            issues = []
-            if r.acc_gaps:
-                issues.append(f"acc file numbering gaps at {r.acc_gaps[:10]}")
-            if r.temp_gaps:
-                issues.append(f"temp file numbering gaps at {r.temp_gaps[:10]}")
-            if acc_issues:
-                issues.append(f"{len(acc_issues)} acc shape issue(s): {acc_issues[:3]}")
-            if temp_issues:
-                issues.append(f"{len(temp_issues)} temp shape issue(s): {temp_issues[:3]}")
-            total_shape_issues += len(acc_issues) + len(temp_issues)
-
-            acc_delim = delimiter_summary(r.acc_files)
-            temp_delim = delimiter_summary(r.temp_files)
-            if acc_delim:
-                delimiter_notes.append(f"{split}/{r.name} acc_*.csv: {acc_delim}")
-            if temp_delim:
-                delimiter_notes.append(f"{split}/{r.name} temp_*.csv: {temp_delim}")
-
-            flag = "  [ISSUES]" if issues else ""
-            print(
-                f"  {r.name} (condition {r.condition}): "
-                f"{len(r.acc_files)} acc files, {len(r.temp_files)} temp files{flag}"
+            critical_issues.append(
+                f"{split}: no bearing directories found"
             )
-            for issue in issues:
-                print(f"      - {issue}")
+            continue
+
+        print(f"\n{split}: {len(reports)} bearings")
+
+        for report in reports:
+            acc_issues = summarize_shape_issues(
+                report.acc_files,
+                ACC_EXPECTED_ROWS,
+                ACC_EXPECTED_COLS,
+            )
+
+            temp_issues = summarize_shape_issues(
+                report.temp_files,
+                TEMP_EXPECTED_ROWS,
+                TEMP_EXPECTED_COLS,
+            )
+
+            bearing_critical: list[str] = []
+            bearing_warnings: list[str] = []
+
+            if report.condition not in {1, 2, 3}:
+                bearing_critical.append(
+                    "invalid bearing directory name / condition"
+                )
+
+            if not report.acc_files:
+                bearing_critical.append(
+                    "no acceleration files found"
+                )
+
+            if report.acc_gaps:
+                bearing_critical.append(
+                    "acc file numbering gaps at "
+                    f"{report.acc_gaps[:10]}"
+                )
+
+            if acc_issues:
+                bearing_critical.append(
+                    f"{len(acc_issues)} acc shape issue(s): "
+                    f"{acc_issues[:3]}"
+                )
+
+            if report.temp_gaps:
+                message = (
+                    "temp file numbering gaps at "
+                    f"{report.temp_gaps[:10]}"
+                )
+
+                if args.strict_temperature:
+                    bearing_critical.append(message)
+                else:
+                    bearing_warnings.append(message)
+
+            if temp_issues:
+                message = (
+                    f"{len(temp_issues)} temp shape issue(s): "
+                    f"{temp_issues[:3]}"
+                )
+
+                if args.strict_temperature:
+                    bearing_critical.append(message)
+                else:
+                    bearing_warnings.append(message)
+
+            acc_delimiter = delimiter_summary(
+                report.acc_files
+            )
+
+            temp_delimiter = delimiter_summary(
+                report.temp_files
+            )
+
+            if acc_delimiter:
+                delimiter_notes.append(
+                    f"{split}/{report.name} acc_*.csv: "
+                    f"{acc_delimiter}"
+                )
+
+            if temp_delimiter:
+                delimiter_notes.append(
+                    f"{split}/{report.name} temp_*.csv: "
+                    f"{temp_delimiter}"
+                )
+
+            if bearing_critical:
+                status = "  [CRITICAL]"
+            elif bearing_warnings:
+                status = "  [WARN]"
+            else:
+                status = ""
+
+            print(
+                f"  {report.name} "
+                f"(condition {report.condition}): "
+                f"{len(report.acc_files)} acc files, "
+                f"{len(report.temp_files)} temp files"
+                f"{status}"
+            )
+
+            for issue in bearing_critical:
+                message = (
+                    f"{split}/{report.name}: {issue}"
+                )
+                critical_issues.append(message)
+                print(f"      - CRITICAL: {issue}")
+
+            for issue in bearing_warnings:
+                message = (
+                    f"{split}/{report.name}: {issue}"
+                )
+                warning_issues.append(message)
+                print(f"      - WARNING: {issue}")
 
     if all_strays:
-        print(f"\nStray files (not acc_*/temp_*, ignored — e.g. .DS_Store): {len(all_strays)}")
-        for s in all_strays:
-            print(f"  - {s}")
+        print(
+            "\nStray files "
+            "(not acc_*/temp_*; ignored): "
+            f"{len(all_strays)}"
+        )
+
+        for stray in all_strays:
+            print(f"  - {stray}")
+            warning_issues.append(
+                f"stray file: {stray}"
+            )
 
     print("\n" + "=" * 70)
-    print("Delimiter irregularities (not corruption — dataset ships inconsistently;")
-    print("ingestion code must autodetect delimiter per file, not assume comma)")
+    print(
+        "Delimiter irregularities "
+        "(informational; supported by ingestion)"
+    )
     print("=" * 70)
+
     if delimiter_notes:
         for note in delimiter_notes:
             print(f"  {note}")
@@ -287,16 +618,56 @@ def main() -> None:
         print("  none — all files comma-delimited")
 
     print("\n" + "=" * 70)
-    print("Test_set vs Validation_Set (truncation / RUL ground-truth check)")
+    print(
+        "Test_set vs Validation_Set "
+        "(truncation / RUL ground-truth check)"
+    )
     print("=" * 70)
-    for note in check_test_is_prefix_of_validation(data_dir):
+
+    truncation_notes, truncation_critical = (
+        check_test_is_prefix_of_validation(data_dir)
+    )
+
+    for note in truncation_notes:
         print(f"  {note}")
 
+    critical_issues.extend(truncation_critical)
+
     print("\n" + "=" * 70)
-    if total_shape_issues == 0:
-        print(f"PASS — {len(all_reports)} bearing directories, all files checked, no shape/gap issues found.")
+
+    if critical_issues:
+        print(
+            "FAILED — "
+            f"{len(critical_issues)} critical issue(s), "
+            f"{len(warning_issues)} warning(s), "
+            f"{len(all_reports)} bearing directories checked."
+        )
+        print("=" * 70)
+
+        print("\nCritical issues:")
+        for issue in critical_issues:
+            print(f"  - {issue}")
+
+        raise SystemExit(1)
+
+    if warning_issues:
+        print(
+            "PASS WITH WARNINGS — "
+            f"0 critical issues, "
+            f"{len(warning_issues)} warning(s), "
+            f"{len(all_reports)} bearing directories checked."
+        )
+        print(
+            "Temperature warnings are non-blocking because "
+            "Feature Set V1 is vibration-only."
+        )
     else:
-        print(f"FOUND {total_shape_issues} shape issue(s) across {len(all_reports)} bearing directories — see above.")
+        print(
+            "PASS — "
+            f"{len(all_reports)} bearing directories checked; "
+            "no critical issues or warnings found."
+        )
+
     print("=" * 70)
 
 

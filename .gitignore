@@ -221,3 +221,7 @@ __marimo__/
 .DS_Store
 
 data/
+
+# Generated artifacts
+artifacts/*
+!artifacts/.gitkeep
