@@ -223,5 +223,8 @@ __marimo__/
 data/
 
 # Generated artifacts
-artifacts/*
+artifacts/
 !artifacts/.gitkeep
+# Local MLOps runtime state
+.env
+airflow/logs/
