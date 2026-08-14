@@ -46,3 +46,48 @@ python scripts/verify_data.py
 ```
 
 Run tests with `pytest`.
+
+## Local MLOps stack
+
+The development stack includes Airflow, MLflow (including its Model Registry),
+Grafana, PostgreSQL, and MinIO-compatible artifact storage. Docker Desktop with
+Compose v2 is required.
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+```
+
+On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
+
+| Service | URL | Local credentials |
+| --- | --- | --- |
+| Airflow | http://localhost:8080 | `admin` / `admin` by default |
+| MLflow + Model Registry | http://localhost:5000 | none (local only) |
+| Grafana | http://localhost:3000 | `admin` / `admin` by default |
+| MinIO console | http://localhost:9001 | `minio` / `minio-local` by default |
+
+In Airflow, enable and manually trigger the `femto_rul_training` DAG. Its smoke-test
+model uses synthetic regression data so the integration can be tested before the
+FEMTO data pipeline is ready. The run and RMSE appear in MLflow, and the model is
+registered as `femto-rul-model`.
+
+Useful commands:
+
+```bash
+docker compose ps
+docker compose logs -f
+docker compose down
+docker compose down -v  # also removes local service databases and artifacts
+```
+
+The exposed passwords and ports are development defaults only. Replace them with
+managed secrets, private networking, TLS, and managed databases/object storage
+before deploying this stack to a cloud environment.
+
+## Oracle Cloud
+
+The Ubuntu ARM64 deployment uses the same images with a resource-limited Compose
+override, generated secrets, persistent named volumes, and localhost-only web
+ports accessed through SSH tunnels. Follow
+[docs/oracle_deployment.md](docs/oracle_deployment.md).

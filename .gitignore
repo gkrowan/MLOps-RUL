@@ -221,3 +221,8 @@ __marimo__/
 .DS_Store
 
 data/
+
+# Local MLOps runtime state
+.env
+airflow/logs/
+artifacts/

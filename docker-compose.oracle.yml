@@ -1,0 +1,60 @@
+services:
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1536M
+
+  minio:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 2G
+
+  mlflow:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 2G
+
+  airflow-init:
+    environment: &oracle-airflow-environment
+      AIRFLOW__CORE__PARALLELISM: "4"
+      AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"
+      AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: "1"
+      AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  airflow-webserver:
+    environment: *oracle-airflow-environment
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  airflow-scheduler:
+    environment: *oracle-airflow-environment
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  grafana:
+    environment:
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
