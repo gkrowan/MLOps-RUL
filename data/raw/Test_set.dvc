@@ -1,0 +1,6 @@
+outs:
+- md5: c5fa5af71e61ff3703764ca1aca93f1e.dir
+  size: 1152306837
+  nfiles: 15686
+  hash: md5
+  path: Test_set
