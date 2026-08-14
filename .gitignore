@@ -220,8 +220,6 @@ __marimo__/
 # macOS
 .DS_Store
 
-data/
-
 # Generated artifacts
 artifacts/
 !artifacts/.gitkeep
