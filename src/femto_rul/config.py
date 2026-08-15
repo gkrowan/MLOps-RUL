@@ -221,6 +221,33 @@ MLFLOW_MODEL_ALIAS: Final[str] = (
 
 
 # ---------------------------------------------------------------------------
+# Inference telemetry (Phase 16)
+#
+# POSTGRES_PASSWORD is deliberately not exposed as a module-level constant —
+# read it with require_env() at the point a connection is actually opened,
+# same policy as DVC/MinIO secrets above.
+# ---------------------------------------------------------------------------
+
+INFERENCE_DB_HOST: Final[str] = env("INFERENCE_DB_HOST", "postgres") or "postgres"
+INFERENCE_DB_PORT: Final[int] = int(env("INFERENCE_DB_PORT", "5432") or "5432")
+INFERENCE_DB_NAME: Final[str] = env("INFERENCE_DB_NAME", "inference") or "inference"
+POSTGRES_USER: Final[str] = env("POSTGRES_USER", "mlops") or "mlops"
+
+PREDICTIONS_TABLE: Final[str] = "predictions"
+
+
+# ---------------------------------------------------------------------------
+# Monitoring (Phase 17)
+# ---------------------------------------------------------------------------
+
+MONITORING_ARTIFACTS_DIR: Final[Path] = ARTIFACTS_DIR / "monitoring"
+
+MONITORING_REFERENCE_RANGES_PATH: Final[Path] = (
+    REPO_ROOT / "configs" / "monitoring_reference_ranges.json"
+)
+
+
+# ---------------------------------------------------------------------------
 # Dataset / scientific constants
 #
 # These intentionally remain version-controlled because they define the

@@ -1,0 +1,20 @@
+apiVersion: 1
+
+# Phase 16 — dedicated datasource for application telemetry (the
+# `predictions` table). Additive: does not touch the existing "MLOps
+# PostgreSQL" datasource (postgres.yml), which points at the mlflow backend
+# store and may be depended on for something else.
+datasources:
+  - name: Inference PostgreSQL
+    uid: inference-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: ${POSTGRES_USER}
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}
+    jsonData:
+      database: inference
+      sslmode: disable
+      postgresVersion: 1600
+    isDefault: false

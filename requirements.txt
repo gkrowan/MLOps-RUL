@@ -11,5 +11,13 @@ pyarrow==25.0.0
 # Data versioning / MinIO S3 remote
 dvc[s3]==3.67.1
 
+# Phase 16/17 — inference telemetry + monitoring.
+# psycopg2-binary version matches docker/mlflow/Dockerfile's pin, so the
+# app and the mlflow container agree on driver behavior.
+psycopg2-binary==2.9.10
+# Verified against pandas==3.0.5/scikit-learn==1.9.0 above (dry-run install,
+# 2026-08-14) — resolves cleanly, no downgrade needed.
+evidently==0.7.21
+
 # install this repo's own package (src/femto_rul) in editable mode
 -e .

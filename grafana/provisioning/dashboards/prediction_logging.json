@@ -1,0 +1,87 @@
+{
+  "title": "FEMTO RUL — Prediction Logging",
+  "uid": "femto-rul-prediction-logging",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request count",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "inference-postgres" },
+      "targets": [
+        {
+          "rawSql": "SELECT $__timeGroup(requested_at, '$__interval') AS time, count(*) AS requests FROM predictions WHERE $__timeFilter(requested_at) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Latency (p50 / p95, ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "inference-postgres" },
+      "targets": [
+        {
+          "rawSql": "SELECT $__timeGroup(requested_at, '$__interval') AS time, percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms) AS p50_latency_ms, percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95_latency_ms FROM predictions WHERE $__timeFilter(requested_at) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Error rate (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "inference-postgres" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "targets": [
+        {
+          "rawSql": "SELECT $__timeGroup(requested_at, '$__interval') AS time, 100.0 * sum(CASE WHEN status = 'error' THEN 1 ELSE 0 END) / count(*) AS error_rate_pct FROM predictions WHERE $__timeFilter(requested_at) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Throughput (requests/min, selected range)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "inference-postgres" },
+      "targets": [
+        {
+          "rawSql": "SELECT count(*)::float / GREATEST(EXTRACT(EPOCH FROM (max(requested_at) - min(requested_at))) / 60.0, 1) AS requests_per_minute FROM predictions WHERE $__timeFilter(requested_at)",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Active model version",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "inference-postgres" },
+      "targets": [
+        {
+          "rawSql": "SELECT model_name || ' ' || model_version || ' (' || model_alias || ')' AS active_model FROM predictions ORDER BY requested_at DESC LIMIT 1",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
