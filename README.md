@@ -25,7 +25,7 @@ tests/                  pytest suite
 
 ## Setup
 
-Requires Python 3.12 (chosen for broad wheel/tooling support; 3.14 is too new for some
+Requires Python 3.12.3 (chosen for broad wheel/tooling support; 3.14 is too new for some
 scientific-stack packages to have published wheels yet).
 
 ```bash
