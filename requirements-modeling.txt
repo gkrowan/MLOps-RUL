@@ -1,9 +1,0 @@
--r requirements.txt
-
-# Experiment tracking / model selection stack.
-# MLflow is aligned with the repository's existing MLflow server image.
-mlflow-skinny==3.1.4
-PyYAML==6.0.3
-optuna==4.8.0
-xgboost>=3.1,<4
-lightgbm==4.6.0

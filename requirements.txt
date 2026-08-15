@@ -11,5 +11,13 @@ pyarrow==25.0.0
 # Data versioning / MinIO S3 remote
 dvc[s3]==3.67.1
 
+# Experiment tracking / model selection stack.
+# MLflow is aligned with the repository's existing MLflow server image.
+mlflow-skinny==3.1.4
+PyYAML==6.0.3
+optuna==4.8.0
+xgboost>=3.1,<4
+lightgbm==4.6.0
+
 # install this repo's own package (src/femto_rul) in editable mode
 -e .
