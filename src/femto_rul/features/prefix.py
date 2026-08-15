@@ -169,3 +169,62 @@ def build_prefix_training_samples(
     if not np.isfinite(numeric).all():
         raise ValueError("prefix feature generation produced non-finite values")
     return result.sort_values(["bearing", "cut_file_index"]).reset_index(drop=True)
+
+
+
+def build_prefix_endpoint_features(test_frame: pd.DataFrame) -> pd.DataFrame:
+    """Build one Prefix V1 inference row per observed Test_set bearing.
+
+    The entire *observed* test trajectory is treated as the prefix. This
+    function requires no RUL labels, no Validation_Set information, and no
+    knowledge of the eventual full bearing lifetime.
+    """
+    required = {
+        "condition",
+        "bearing",
+        "file_index",
+        *PREFIX_SOURCE_FEATURES,
+    }
+    missing = sorted(required - set(test_frame.columns))
+    if missing:
+        raise ValueError(f"prefix inference input missing columns: {missing}")
+    if "rul_seconds" in test_frame.columns:
+        raise ValueError("test inference features must not contain rul_seconds")
+
+    rows: list[dict[str, object]] = []
+    for bearing, bearing_frame in test_frame.groupby("bearing", sort=True):
+        ordered = bearing_frame.sort_values("file_index").reset_index(drop=True)
+        if len(ordered) < 2:
+            raise ValueError(f"bearing {bearing} has too few observed snapshots")
+
+        endpoint = ordered.iloc[-1]
+        condition = int(endpoint["condition"])
+        speed, load = _physical_context(condition)
+        observed_age = float(endpoint["file_index"]) * float(FILE_INTERVAL_SECONDS)
+
+        row: dict[str, object] = {
+            "condition": condition,
+            "bearing": str(endpoint["bearing"]),
+            "cut_file_index": int(endpoint["file_index"]),
+            "observed_age_seconds": observed_age,
+            "rotation_speed_rpm": speed,
+            "radial_load_n": load,
+        }
+
+        for source in PREFIX_SOURCE_FEATURES:
+            values = ordered[source].to_numpy(dtype=float)
+            early = values[: min(EARLY_WINDOW, len(values))]
+            recent = values[-min(RECENT_WINDOW, len(values)) :]
+            early_level = float(np.median(early))
+            scale = max(abs(early_level), 1e-8)
+            row[f"{source}_current_over_early"] = float(values[-1] / scale)
+            row[f"{source}_recent_mean_over_early"] = float(np.mean(recent) / scale)
+            row[f"{source}_recent_slope_per_hour"] = _slope_per_hour(recent)
+
+        rows.append(row)
+
+    result = pd.DataFrame(rows).sort_values("bearing").reset_index(drop=True)
+    numeric = result[prefix_feature_columns()].to_numpy(dtype=float)
+    if not np.isfinite(numeric).all():
+        raise ValueError("prefix inference generation produced non-finite values")
+    return result
