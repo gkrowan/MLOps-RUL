@@ -49,6 +49,26 @@ models:
   E108:
     name: lightgbm
     description: LightGBM direct-RUL comparison.
+  E201:
+    name: median
+    representation: health_v2
+    benchmark_version: health-indicator-direct-rul-v2
+    description: Median control on the Health Indicator V2 dataset; should match E101.
+  E202:
+    name: extra_trees
+    representation: health_v2
+    benchmark_version: health-indicator-direct-rul-v2
+    description: ExtraTrees on causal Health Indicator V2 features.
+  E203:
+    name: random_forest
+    representation: health_v2
+    benchmark_version: health-indicator-direct-rul-v2
+    description: Random Forest on causal Health Indicator V2 features.
+  E204:
+    name: hist_gradient_boosting
+    representation: health_v2
+    benchmark_version: health-indicator-direct-rul-v2
+    description: Histogram Gradient Boosting on causal Health Indicator V2 features.
 
 model_defaults:
   ridge:
@@ -100,3 +120,8 @@ registry:
   model_name: femto-rul-model
   candidate_alias: candidate
   semantic_version: 0.1.0
+
+health_indicator:
+  healthy_window_snapshots: 60
+  recent_window_snapshots: 60
+  robust_z_clip: 50.0

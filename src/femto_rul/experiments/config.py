@@ -1,4 +1,4 @@
-"""Configuration loader for the canonical FEMTO RUL experiment protocol."""
+"""Configuration loader for FEMTO RUL experiment protocols."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from femto_rul.config import REPO_ROOT, TRAIN_FEATURES_PATH
 
 PARAMS_PATH = REPO_ROOT / "params.yaml"
 PREFIX_DATASET_PATH = TRAIN_FEATURES_PATH.parent / "prefix_train_v1.parquet"
+HEALTH_DATASET_PATH = TRAIN_FEATURES_PATH.parent / "prefix_health_v2.parquet"
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,8 @@ class ExperimentSpec:
     experiment_id: str
     model_name: str
     description: str
+    representation: str = "prefix_v1"
+    benchmark_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,12 @@ def load_experiment_config(path: Path = PARAMS_PATH) -> ExperimentConfig:
             experiment_id=exp_id,
             model_name=str(spec["name"]),
             description=str(spec.get("description", "")),
+            representation=str(spec.get("representation", "prefix_v1")),
+            benchmark_version=(
+                str(spec["benchmark_version"])
+                if spec.get("benchmark_version") is not None
+                else None
+            ),
         )
         for exp_id, spec in raw["models"].items()
     }
@@ -81,10 +90,7 @@ def load_experiment_config(path: Path = PARAMS_PATH) -> ExperimentConfig:
         expected_prefix_rows=int(exp["expected_prefix_rows"]),
         test_accessed=bool(exp["test_accessed"]),
         validation_accessed=bool(exp["validation_accessed"]),
-        model_defaults={
-            str(name): dict(values or {})
-            for name, values in raw.get("model_defaults", {}).items()
-        },
+        model_defaults={str(name): dict(values or {}) for name, values in raw.get("model_defaults", {}).items()},
         models=model_specs,
         hpo=dict(raw.get("hpo", {})),
         registry=dict(raw.get("registry", {})),

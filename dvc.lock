@@ -24,8 +24,8 @@ stages:
       size: 17997
     - path: src/femto_rul/config.py
       hash: md5
-      md5: 47e1bd4b6232d2eb42729dfb1df6ab28
-      size: 8200
+      md5: 1dee074ea2d94f2fe8bc7f6d2d066d3c
+      size: 8301
   build_processed:
     cmd: python scripts/build_datasets.py --mode all
     deps:
@@ -50,13 +50,13 @@ stages:
       size: 2582
     - path: src/femto_rul/config.py
       hash: md5
-      md5: 47e1bd4b6232d2eb42729dfb1df6ab28
-      size: 8200
+      md5: 1dee074ea2d94f2fe8bc7f6d2d066d3c
+      size: 8301
     - path: src/femto_rul/features
       hash: md5
-      md5: 1e2d35f21c5a799370f2e8af0feb7f5b.dir
-      size: 37578
-      nfiles: 12
+      md5: 11b2012e900c29e06740fceb789d5777.dir
+      size: 66041
+      nfiles: 15
     - path: src/femto_rul/ingestion
       hash: md5
       md5: 4d0fc00080ace8aaf9d5c4d9b872735e.dir
@@ -120,8 +120,8 @@ stages:
       size: 5777040
     - path: params.yaml
       hash: md5
-      md5: 8ff9a7e99bd88fd1fd5eaf58e73bfc1d
-      size: 2212
+      md5: 425401189599e2dbc4996cdb2d558cca
+      size: 3089
     - path: scripts/build_prefix_dataset.py
       hash: md5
       md5: 618cb1cf26b3f22c376ca7d9d2f0ceec
@@ -145,8 +145,8 @@ stages:
       size: 33118
     - path: params.yaml
       hash: md5
-      md5: 8ff9a7e99bd88fd1fd5eaf58e73bfc1d
-      size: 2212
+      md5: 425401189599e2dbc4996cdb2d558cca
+      size: 3089
     - path: scripts/verify_prefix_dataset.py
       hash: md5
       md5: 4c7b860e4d4b61e390381a208b28c97c
@@ -156,3 +156,48 @@ stages:
       hash: md5
       md5: e4d4484ac9d40e2e1a34cd430ee12490
       size: 5642
+  build_health_dataset:
+    cmd: python scripts/build_health_dataset.py
+    deps:
+    - path: data/processed/train_features.parquet
+      hash: md5
+      md5: 20e303a0b9390419de93fdaa2b3552ae
+      size: 5777040
+    - path: params.yaml
+      hash: md5
+      md5: 425401189599e2dbc4996cdb2d558cca
+      size: 3089
+    - path: scripts/build_health_dataset.py
+      hash: md5
+      md5: 7afa491fb34024d88ba2380c7c3bfa74
+      size: 1379
+      isexec: true
+    - path: src/femto_rul/features/health_indicator.py
+      hash: md5
+      md5: f2cda253aa66c793936ab6765fa5a04c
+      size: 7416
+    outs:
+    - path: data/processed/prefix_health_v2.parquet
+      hash: md5
+      md5: 25aaad5e0d3db4abfaad4e40ff69bcda
+      size: 38324
+  verify_health_dataset:
+    cmd: python scripts/verify_health_dataset.py
+    deps:
+    - path: data/processed/prefix_health_v2.parquet
+      hash: md5
+      md5: 25aaad5e0d3db4abfaad4e40ff69bcda
+      size: 38324
+    - path: params.yaml
+      hash: md5
+      md5: 425401189599e2dbc4996cdb2d558cca
+      size: 3089
+    - path: scripts/verify_health_dataset.py
+      hash: md5
+      md5: d2c7188d3ed3c966e50ebdbe9bccff41
+      size: 2136
+      isexec: true
+    - path: src/femto_rul/features/health_indicator.py
+      hash: md5
+      md5: f2cda253aa66c793936ab6765fa5a04c
+      size: 7416

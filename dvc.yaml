@@ -52,3 +52,21 @@ stages:
       - scripts/verify_prefix_dataset.py
       - src/femto_rul/features/prefix.py
       - data/processed/prefix_train_v1.parquet
+
+  build_health_dataset:
+    cmd: python scripts/build_health_dataset.py
+    deps:
+      - params.yaml
+      - scripts/build_health_dataset.py
+      - src/femto_rul/features/health_indicator.py
+      - data/processed/train_features.parquet
+    outs:
+      - data/processed/prefix_health_v2.parquet
+
+  verify_health_dataset:
+    cmd: python scripts/verify_health_dataset.py
+    deps:
+      - params.yaml
+      - scripts/verify_health_dataset.py
+      - src/femto_rul/features/health_indicator.py
+      - data/processed/prefix_health_v2.parquet
