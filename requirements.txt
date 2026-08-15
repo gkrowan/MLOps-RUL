@@ -11,6 +11,14 @@ pyarrow==25.0.0
 # Data versioning / MinIO S3 remote
 dvc[s3]==3.67.1
 
+# Experiment tracking / model selection stack.
+# MLflow is aligned with the repository's existing MLflow server image.
+mlflow-skinny==3.1.4
+PyYAML==6.0.3
+optuna==4.8.0
+xgboost>=3.1,<4
+lightgbm==4.6.0
+
 # Phase 16/17 — inference telemetry + monitoring.
 # psycopg2-binary version matches docker/mlflow/Dockerfile's pin, so the
 # app and the mlflow container agree on driver behavior.

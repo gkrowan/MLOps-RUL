@@ -1,0 +1,72 @@
+stages:
+  verify_raw:
+    cmd: python scripts/verify_data.py
+    deps:
+      - scripts/verify_data.py
+      - src/femto_rul/config.py
+      - data/raw/Training_set
+      - data/raw/Test_set
+      - data/raw/Validation_Set
+
+  build_processed:
+    cmd: python scripts/build_datasets.py --mode all
+    deps:
+      - scripts/build_datasets.py
+      - src/femto_rul/config.py
+      - src/femto_rul/pipeline.py
+      - src/femto_rul/features
+      - src/femto_rul/ingestion
+      - src/femto_rul/labeling
+      - data/raw/Training_set
+      - data/raw/Test_set
+      - data/raw/Validation_Set
+    outs:
+      - data/processed/train_features.parquet
+      - data/processed/test_features.parquet
+      - data/processed/test_ground_truth.parquet
+      - data/processed/feature_schema.json
+
+  verify_processed:
+    cmd: python scripts/verify_processed_data.py
+    deps:
+      - scripts/verify_processed_data.py
+      - data/processed/train_features.parquet
+      - data/processed/test_features.parquet
+      - data/processed/test_ground_truth.parquet
+      - data/processed/feature_schema.json
+
+  build_prefix_dataset:
+    cmd: python scripts/build_prefix_dataset.py
+    deps:
+      - params.yaml
+      - scripts/build_prefix_dataset.py
+      - src/femto_rul/features/prefix.py
+      - data/processed/train_features.parquet
+    outs:
+      - data/processed/prefix_train_v1.parquet
+
+  verify_prefix_dataset:
+    cmd: python scripts/verify_prefix_dataset.py
+    deps:
+      - params.yaml
+      - scripts/verify_prefix_dataset.py
+      - src/femto_rul/features/prefix.py
+      - data/processed/prefix_train_v1.parquet
+
+  build_health_dataset:
+    cmd: python scripts/build_health_dataset.py
+    deps:
+      - params.yaml
+      - scripts/build_health_dataset.py
+      - src/femto_rul/features/health_indicator.py
+      - data/processed/train_features.parquet
+    outs:
+      - data/processed/prefix_health_v2.parquet
+
+  verify_health_dataset:
+    cmd: python scripts/verify_health_dataset.py
+    deps:
+      - params.yaml
+      - scripts/verify_health_dataset.py
+      - src/femto_rul/features/health_indicator.py
+      - data/processed/prefix_health_v2.parquet
