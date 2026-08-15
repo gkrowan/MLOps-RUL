@@ -1,8 +1,8 @@
 """Prefix-level features for challenge-aligned FEMTO RUL evaluation.
 
 A prefix sample represents one bearing observed only up to a truncation point.
-Features use the visible prefix only. The target RUL is used only for Training_set
-pseudo-test samples during model development.
+Features use the visible prefix only. Targets are derived only from complete
+Training_set trajectories during model development.
 """
 
 from __future__ import annotations
@@ -23,7 +23,22 @@ PREFIX_SOURCE_FEATURES: Final[list[str]] = [
     "crest_factor_vert",
 ]
 
-DEFAULT_PREFIX_FRACTIONS: Final[tuple[float, ...]] = (0.55, 0.65, 0.75, 0.85, 0.95)
+# Fixed broad pseudo-truncation grid. These fractions are experiment design
+# points only; cut_fraction is metadata and is never passed to the model.
+DEFAULT_PREFIX_FRACTIONS: Final[tuple[float, ...]] = (
+    0.40,
+    0.45,
+    0.50,
+    0.55,
+    0.60,
+    0.65,
+    0.70,
+    0.75,
+    0.80,
+    0.85,
+    0.90,
+    0.95,
+)
 EARLY_WINDOW: Final[int] = 60
 RECENT_WINDOW: Final[int] = 60
 
@@ -78,16 +93,20 @@ def _one_prefix_row(
     condition = int(endpoint["condition"])
     bearing = str(endpoint["bearing"])
     speed, load = _physical_context(condition)
+    observed_age = float(endpoint["file_index"]) * float(FILE_INTERVAL_SECONDS)
+    rul = float(endpoint["rul_seconds"])
 
     result: dict[str, object] = {
         "condition": condition,
         "bearing": bearing,
         "cut_fraction": float(fraction),
         "cut_file_index": int(endpoint["file_index"]),
-        "observed_age_seconds": float(endpoint["file_index"]) * float(FILE_INTERVAL_SECONDS),
+        "observed_age_seconds": observed_age,
         "rotation_speed_rpm": speed,
         "radial_load_n": load,
-        "rul_seconds": float(endpoint["rul_seconds"]),
+        "rul_seconds": rul,
+        # Training-only supervision metadata. This is NEVER a model predictor.
+        "total_life_seconds": observed_age + rul,
     }
 
     for source in PREFIX_SOURCE_FEATURES:
@@ -111,8 +130,8 @@ def build_prefix_training_samples(
 ) -> pd.DataFrame:
     """Create pseudo-test endpoint samples from Training_set trajectories.
 
-    Cut fractions are fixed experiment design points and are never predictors.
-    Each feature row sees only samples at or before its cut point.
+    Each feature row sees only samples at or before its cut point. The model
+    never receives cut_fraction, final lifetime, or future snapshots.
     """
     required = {
         "condition",
@@ -146,7 +165,7 @@ def build_prefix_training_samples(
 
     result = pd.DataFrame(rows)
     features = prefix_feature_columns()
-    numeric = result[[*features, "rul_seconds"]].to_numpy(dtype=float)
+    numeric = result[[*features, "rul_seconds", "total_life_seconds"]].to_numpy(dtype=float)
     if not np.isfinite(numeric).all():
         raise ValueError("prefix feature generation produced non-finite values")
     return result.sort_values(["bearing", "cut_file_index"]).reset_index(drop=True)
