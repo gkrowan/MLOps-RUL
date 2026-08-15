@@ -24,6 +24,7 @@ import pandas as pd
 from femto_rul.config import FILE_INTERVAL_SECONDS
 from femto_rul.features.frequency_domain import fft_band_energy
 from femto_rul.features.schema import CHANNEL_SPECS, GROUND_TRUTH_KEY_COLUMNS
+from femto_rul.features.temporal import add_causal_temporal_features
 from femto_rul.features.time_domain import time_domain_features
 from femto_rul.ingestion.raw_loader import file_index, list_bearing_files, load_acc_file
 from femto_rul.labeling.rul import label_full_run_bearing, label_truncated_bearing
@@ -56,7 +57,7 @@ def _concat(frames: list[pd.DataFrame], *, context: str) -> pd.DataFrame:
 
 
 def extract_snapshot_features(acc_path: Path) -> dict[str, float]:
-    """Compute Feature Set V1 for one vibration snapshot."""
+    """Compute base per-snapshot vibration features for one snapshot."""
     df = load_acc_file(acc_path)
     features: dict[str, float] = {}
 
@@ -73,7 +74,7 @@ def extract_snapshot_features(acc_path: Path) -> dict[str, float]:
 
 
 def extract_bearing_features(bearing_dir: Path) -> pd.DataFrame:
-    """Return one Feature Set V1 row per ``acc_*.csv`` snapshot."""
+    """Return one Feature Set V2 row per ``acc_*.csv`` snapshot."""
     rows: list[dict[str, float | int]] = []
 
     for path in list_bearing_files(bearing_dir, "acc"):
@@ -84,7 +85,8 @@ def extract_bearing_features(bearing_dir: Path) -> pd.DataFrame:
     if not rows:
         raise ValueError(f"no acceleration files found under {bearing_dir}")
 
-    return pd.DataFrame(rows)
+    snapshot_frame = pd.DataFrame(rows)
+    return add_causal_temporal_features(snapshot_frame)
 
 
 def build_bearing_feature_dataset(bearing_dir: Path, split_name: str) -> pd.DataFrame:
