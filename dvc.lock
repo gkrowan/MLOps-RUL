@@ -54,9 +54,9 @@ stages:
       size: 8200
     - path: src/femto_rul/features
       hash: md5
-      md5: 253d64a1d66ae93c2f890f0c375255dd.dir
-      size: 15162
-      nfiles: 8
+      md5: 1e2d35f21c5a799370f2e8af0feb7f5b.dir
+      size: 37578
+      nfiles: 12
     - path: src/femto_rul/ingestion
       hash: md5
       md5: 4d0fc00080ace8aaf9d5c4d9b872735e.dir
@@ -69,45 +69,90 @@ stages:
       nfiles: 4
     - path: src/femto_rul/pipeline.py
       hash: md5
-      md5: 5fd33bd9460a0d8ad75715f862e7d557
-      size: 8858
+      md5: fa76465847debac07483d8d3d86bf5e2
+      size: 9005
     outs:
     - path: data/processed/feature_schema.json
       hash: md5
-      md5: 526da1315dc0bb663dccc7ea0959cab7
-      size: 3178
+      md5: bb2360519ea18318e29a965addc4dfda
+      size: 10874
     - path: data/processed/test_features.parquet
       hash: md5
-      md5: 33ddcc0a74e817d976084c9f7f7fc5f2
-      size: 3321843
+      md5: 2a7cb9c436d9f2ecdd844cec93dda85b
+      size: 10709408
     - path: data/processed/test_ground_truth.parquet
       hash: md5
       md5: 44837806a229e18e24c23e1a5fbace30
       size: 50281
     - path: data/processed/train_features.parquet
       hash: md5
-      md5: 7d1df81fc1e40b90f6d115606d4c0f42
-      size: 1822755
+      md5: 20e303a0b9390419de93fdaa2b3552ae
+      size: 5777040
   verify_processed:
     cmd: python scripts/verify_processed_data.py
     deps:
     - path: data/processed/feature_schema.json
       hash: md5
-      md5: 526da1315dc0bb663dccc7ea0959cab7
-      size: 3178
+      md5: bb2360519ea18318e29a965addc4dfda
+      size: 10874
     - path: data/processed/test_features.parquet
       hash: md5
-      md5: 33ddcc0a74e817d976084c9f7f7fc5f2
-      size: 3321843
+      md5: 2a7cb9c436d9f2ecdd844cec93dda85b
+      size: 10709408
     - path: data/processed/test_ground_truth.parquet
       hash: md5
       md5: 44837806a229e18e24c23e1a5fbace30
       size: 50281
     - path: data/processed/train_features.parquet
       hash: md5
-      md5: 7d1df81fc1e40b90f6d115606d4c0f42
-      size: 1822755
+      md5: 20e303a0b9390419de93fdaa2b3552ae
+      size: 5777040
     - path: scripts/verify_processed_data.py
       hash: md5
       md5: 72c44ac48f7f5bc460ebe0355faec14d
       size: 4808
+  build_prefix_dataset:
+    cmd: python scripts/build_prefix_dataset.py
+    deps:
+    - path: data/processed/train_features.parquet
+      hash: md5
+      md5: 20e303a0b9390419de93fdaa2b3552ae
+      size: 5777040
+    - path: params.yaml
+      hash: md5
+      md5: 8ff9a7e99bd88fd1fd5eaf58e73bfc1d
+      size: 2212
+    - path: scripts/build_prefix_dataset.py
+      hash: md5
+      md5: 618cb1cf26b3f22c376ca7d9d2f0ceec
+      size: 1023
+      isexec: true
+    - path: src/femto_rul/features/prefix.py
+      hash: md5
+      md5: e4d4484ac9d40e2e1a34cd430ee12490
+      size: 5642
+    outs:
+    - path: data/processed/prefix_train_v1.parquet
+      hash: md5
+      md5: bf5353dbee3908deeb23abf851d4bbb0
+      size: 33118
+  verify_prefix_dataset:
+    cmd: python scripts/verify_prefix_dataset.py
+    deps:
+    - path: data/processed/prefix_train_v1.parquet
+      hash: md5
+      md5: bf5353dbee3908deeb23abf851d4bbb0
+      size: 33118
+    - path: params.yaml
+      hash: md5
+      md5: 8ff9a7e99bd88fd1fd5eaf58e73bfc1d
+      size: 2212
+    - path: scripts/verify_prefix_dataset.py
+      hash: md5
+      md5: 4c7b860e4d4b61e390381a208b28c97c
+      size: 2230
+      isexec: true
+    - path: src/femto_rul/features/prefix.py
+      hash: md5
+      md5: e4d4484ac9d40e2e1a34cd430ee12490
+      size: 5642
