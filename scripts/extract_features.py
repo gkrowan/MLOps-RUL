@@ -1,35 +1,17 @@
-"""Run feature extraction across the whole FEMTO dataset and write the
-resulting per-snapshot table to data/processed/features.parquet.
+"""Backward-compatible entry point for production feature extraction.
 
-This is a batch job over ~40k raw files and takes on the order of 20
-minutes single-threaded. data/processed/ is inside the gitignored data/
-directory — this output stays local until pushed to the team's shared
-drive, same as the raw dataset.
+Historically this script created one combined labeled ``features.parquet`` that
+mixed Training_set, Validation_Set, and labeled Test_set rows. That artifact is
+unsafe for production training.
 
-Usage: python scripts/extract_features.py [--data-dir data] [--out data/processed/features.parquet]
+This entry point now delegates to ``build_datasets.py --mode all`` and creates:
+- train_features.parquet
+- test_features.parquet
+- test_ground_truth.parquet
+- feature_schema.json
 """
 
-import argparse
-from pathlib import Path
-
-from femto_rul.pipeline import build_full_dataset
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data-dir", default="data")
-    parser.add_argument("--out", default="data/processed/features.parquet")
-    args = parser.parse_args()
-
-    out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    print("Extracting features across Training_set, Validation_Set, Test_set...")
-    df = build_full_dataset(Path(args.data_dir))
-    print(f"Built {len(df)} rows, {len(df.columns)} columns")
-
-    df.to_parquet(out_path, index=False)
-    print(f"Wrote {out_path}")
+from build_datasets import main
 
 
 if __name__ == "__main__":

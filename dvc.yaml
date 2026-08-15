@@ -1,0 +1,36 @@
+stages:
+  verify_raw:
+    cmd: python scripts/verify_data.py
+    deps:
+      - scripts/verify_data.py
+      - src/femto_rul/config.py
+      - data/raw/Training_set
+      - data/raw/Test_set
+      - data/raw/Validation_Set
+
+  build_processed:
+    cmd: python scripts/build_datasets.py --mode all
+    deps:
+      - scripts/build_datasets.py
+      - src/femto_rul/config.py
+      - src/femto_rul/pipeline.py
+      - src/femto_rul/features
+      - src/femto_rul/ingestion
+      - src/femto_rul/labeling
+      - data/raw/Training_set
+      - data/raw/Test_set
+      - data/raw/Validation_Set
+    outs:
+      - data/processed/train_features.parquet
+      - data/processed/test_features.parquet
+      - data/processed/test_ground_truth.parquet
+      - data/processed/feature_schema.json
+
+  verify_processed:
+    cmd: python scripts/verify_processed_data.py
+    deps:
+      - scripts/verify_processed_data.py
+      - data/processed/train_features.parquet
+      - data/processed/test_features.parquet
+      - data/processed/test_ground_truth.parquet
+      - data/processed/feature_schema.json

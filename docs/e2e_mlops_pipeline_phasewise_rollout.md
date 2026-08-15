@@ -1,7 +1,7 @@
 # MLOps-RUL — End-to-End MLOps Pipeline
 ## Reuse-First Phasewise Professional Rollout Plan
 
-**Working branch:** `feature/e2e-mlops-pipeline`  
+**Working branch:** create a phase-specific branch from latest `main`  
 **Target branch:** `main` via Pull Request  
 **Project:** FEMTO/PRONOSTIA Bearing Remaining Useful Life (RUL) Prediction
 
@@ -219,52 +219,43 @@ The application layer should consume this infrastructure, not duplicate it.
 
 # 5. Branch Strategy
 
-Create one feature branch from the latest `main`:
+The team is actively merging parallel work, so each implementation phase starts from the latest
+`main` rather than keeping one long-running branch indefinitely.
+
+Example:
 
 ```bash
-git checkout main
-git pull origin main
-git switch -c feature/e2e-mlops-pipeline
+git switch main
+git pull --ff-only origin main
+git switch -c feature/dataset-boundary-pipeline
 ```
 
 Confirm:
 
 ```bash
 git branch --show-current
-git status
+git status --short
 ```
 
-Do not build directly on Chris's active infrastructure branch.
-
-When infrastructure is merged to `main`:
-
-```bash
-git checkout main
-git pull origin main
-
-git checkout feature/e2e-mlops-pipeline
-git merge main
-```
-
-Then run all tests and integration checks.
+Keep infrastructure, data-pipeline, modeling, and serving changes reviewable through focused pull
+requests. After another team PR lands, sync from `main` before beginning the next phase.
 
 ---
 
 # 6. Target Data Layout
 
-We will distinguish immutable source data, generated extraction state, and model-ready datasets.
+The released FEMTO files are already available as extracted bearing directories, so the
+project does not introduce an unnecessary `interim/` layer.
 
 ```text
 data/
 ├── raw/
-│   ├── Training_set.zip
-│   ├── Test_set.zip
-│   └── Validation_Set.zip
-│
-├── interim/
-│   ├── Training_set/
-│   ├── Test_set/
-│   └── Validation_Set/
+│   ├── Training_set/              # DVC-managed immutable source
+│   ├── Test_set/                  # DVC-managed immutable source
+│   ├── Validation_Set/            # DVC-managed official ground truth source
+│   ├── Training_set.dvc           # Git-tracked DVC metadata
+│   ├── Test_set.dvc
+│   └── Validation_Set.dvc
 │
 └── processed/
     ├── train_features.parquet
@@ -276,12 +267,9 @@ data/
 Rules:
 
 ```text
-data/raw       = immutable source archives
-data/interim   = generated extraction
-data/processed = generated ML-ready artifacts
+data/raw       = immutable source directories managed by DVC/MinIO
+data/processed = generated ML-ready artifacts managed by the DVC pipeline
 ```
-
-The current loader can continue reading extracted bearing directories under `data/interim/`.
 
 ---
 
@@ -372,26 +360,26 @@ Before Phase 2:
 
 ## Objective
 
-Version the immutable source archives with DVC and store the data remotely in MinIO.
+Version the immutable source directories with DVC and store the data remotely in MinIO.
 
 ## Tasks
 
 - install `dvc[s3]`
 - initialize DVC
 - configure MinIO remote
-- track the three raw archives
+- track the three raw source directories
 - push DVC cache to MinIO
 - verify `dvc pull` from a clean state
-- never commit raw ZIP content to Git
+- never commit raw CSV content or `.dvc/cache` to Git
 
 Example:
 
 ```bash
 dvc init
 
-dvc add data/raw/Training_set.zip
-dvc add data/raw/Test_set.zip
-dvc add data/raw/Validation_Set.zip
+dvc add data/raw/Training_set
+dvc add data/raw/Test_set
+dvc add data/raw/Validation_Set
 
 dvc remote add -d minio s3://mlops-rul-dvc
 dvc remote modify minio endpointurl http://localhost:9000
@@ -411,51 +399,35 @@ dvc pull
 
 ---
 
-# PHASE 3 — Reproducible Extraction + Raw Data Contracts
+# PHASE 3 — Raw Data Contract Gate
 
 ## Objective
 
-Transform immutable archives into validated extracted directories.
+Validate the DVC-reproduced source directories before any feature/model stage runs.
 
 Target:
 
 ```text
-data/raw/*.zip
-      ↓
-extract_raw_data
-      ↓
-data/interim/*
-      ↓
-validate_raw_data
+dvc pull
+   ↓
+data/raw/{Training_set,Test_set,Validation_Set}
+   ↓
+python scripts/verify_data.py
+   ↓
+validated immutable source data
 ```
 
 ## Reuse
 
-Refactor, do not discard:
+Keep the existing production components:
 
 ```text
 scripts/verify_data.py
 src/femto_rul/ingestion/raw_loader.py
 ```
 
-Create reusable validation functions under:
-
-```text
-src/femto_rul/validation/
-```
-
-Validate:
-
-- bearing directory names
-- file sequence
-- row/column shape
-- finite numeric acceleration values
-- supported delimiters
-- expected sampling structure
-- Test_set prefix relationship with Validation_Set
-- optional temperature availability
-
-CLI failures must return non-zero exit status.
+The verifier distinguishes critical acceleration/data-contract failures from
+non-blocking temperature warnings and exits non-zero on blocking failures.
 
 ---
 
@@ -492,11 +464,9 @@ Vertical:
 
 Do not add many new features before measuring V1.
 
-Add feature configuration/versioning:
-
-```text
-configs/features_v1.yaml
-```
+Feature Set V1 is versioned through the authoritative implementation plus
+`src/femto_rul/features/schema.py` / `feature_schema.json`. Do not add a second unused feature
+configuration file until a pipeline parameter is genuinely varied.
 
 Possible V2 improvements later:
 
@@ -559,27 +529,26 @@ The old combined `features.parquet` may be retained locally as a historical/refe
 
 ## Objective
 
-Make raw → extracted → validated → feature tables reproducible.
+Make raw validation and processed feature/ground-truth generation reproducible.
 
 Add:
 
 ```text
 dvc.yaml
-params.yaml
 ```
+
+Feature Set V1 choices are fixed in version-controlled source. A separate `params.yaml`
+should be introduced only when a pipeline parameter is genuinely varied (for example a
+future feature-set/model experiment), rather than adding unused configuration.
 
 Target stages:
 
 ```text
-extract
+verify_raw
    ↓
-validate
+build_processed
    ↓
-features_train
-   ↓
-features_test
-   ↓
-ground_truth
+verify_processed
 ```
 
 Run:
@@ -591,7 +560,8 @@ dvc push
 
 Acceptance:
 
-Deleting generated data and rerunning `dvc repro` reproduces the expected artifacts.
+Deleting generated `data/processed/*` and rerunning `dvc repro` reproduces the four expected
+processed artifacts and passes the leakage/data-contract checks.
 
 ---
 

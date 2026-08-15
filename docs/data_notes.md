@@ -5,10 +5,10 @@ Keeping this current as we go so the Week 4 README write-up is assembly, not arc
 
 ## Layout
 
-- `data/Training_set/` — 6 bearings, full run-to-failure. This is the labeled training data.
-- `data/Test_set/` — 11 bearings, **truncated** partway through their run. This is what a
+- `data/raw/Training_set/` — 6 bearings, full run-to-failure. This is the labeled training data.
+- `data/raw/Test_set/` — 11 bearings, **truncated** partway through their run. This is what a
   submission/model would see at inference time.
-- `data/Validation_Set/` — the same 11 bearings as `Test_set`, but the **full** run-to-failure.
+- `data/raw/Validation_Set/` — the same 11 bearings as `Test_set`, but the **full** run-to-failure.
   This is the released ground truth (PHM12 challenge answer key) — `Test_set` is confirmed to be
   a truncated prefix of it (verified: identical accelerometer readings up to the truncation
   point, for all 11 bearings). **Do not train on this** — it's for computing true RUL /
@@ -69,25 +69,36 @@ baseline RMSE is dominated by early-life predictions.
 
 ## Feature extraction schema (decided)
 
-One row per `(split, bearing, file_index)` snapshot. Implemented in `femto_rul.pipeline`
-(`build_bearing_dataset` / `build_full_dataset`). Columns:
+Feature Set V1 remains one row per `(split, bearing, file_index)` snapshot:
 
 - Metadata: `split`, `condition`, `bearing`, `elapsed_time_seconds`, `file_index`
 - Per channel (`_horiz` / `_vert` suffix) — time domain (`femto_rul.features.time_domain`):
   `rms`, `kurtosis` (excess/Fisher, Gaussian ≈ 0), `skewness`, `crest_factor`
 - Per channel — frequency domain (`femto_rul.features.frequency_domain`): `fft_band_0`..`fft_band_7`,
-  8 equal-width bins from 0Hz to the 12.8kHz Nyquist frequency. Chose generic equal-width bins
-  over bearing-fault-frequency-targeted bins (BPFO/BPFI/BSF/FTF) since the latter needs the
-  PRONOSTIA bearing geometry spec verified first — worth revisiting as a stretch goal.
-- Label: `rul_seconds`
+  8 equal-width bins from 0Hz to the 12.8kHz Nyquist frequency.
 
-This is the schema to hand off to Person B's orchestrator — 30 columns total (5 metadata + 24
-feature + 1 label). Run `python scripts/extract_features.py` to regenerate
-`data/processed/features.parquet` (gitignored, ~20min single-threaded over the full dataset).
+The production path does **not** create one combined labeled table. It writes separate artifacts:
+
+```text
+data/processed/
+├── train_features.parquet       # Training_set features + rul_seconds
+├── test_features.parquet        # Test_set features only; NO rul_seconds
+├── test_ground_truth.parquet    # official Test_set keys + rul_seconds
+└── feature_schema.json          # machine-readable Feature Set V1 contract
+```
+
+Production builders in `femto_rul.pipeline` are:
+
+- `build_training_dataset()` — Training_set only, labeled.
+- `build_test_feature_dataset()` — Test_set only, unlabeled and independent of Validation_Set.
+- `build_test_ground_truth()` — the only production path allowed to use Validation_Set.
+
+The historical `build_full_dataset()` helper is retained only for notebook/backward compatibility
+and must never be used for model training or AutoML.
 
 ## Open decisions (not yet made — flag here once decided)
 
-- [ ] Bearing-level train/test split strategy within `Training_set` for local validation
-      (separate from the official `Test_set`/`Validation_Set` held-out bearings)
+- [x] Bearing-level validation strategy: Leave-One-Bearing-Out within `Training_set`
+      (separate from the official `Test_set`/`Validation_Set` holdout)
 - [ ] Whether to add a piecewise/capped RUL label for the healthy-life region
 - [ ] Whether to pursue bearing-fault-frequency-targeted FFT bins (needs geometry spec lookup)
