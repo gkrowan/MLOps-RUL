@@ -34,3 +34,21 @@ stages:
       - data/processed/test_features.parquet
       - data/processed/test_ground_truth.parquet
       - data/processed/feature_schema.json
+
+  build_prefix_dataset:
+    cmd: python scripts/build_prefix_dataset.py
+    deps:
+      - params.yaml
+      - scripts/build_prefix_dataset.py
+      - src/femto_rul/features/prefix.py
+      - data/processed/train_features.parquet
+    outs:
+      - data/processed/prefix_train_v1.parquet
+
+  verify_prefix_dataset:
+    cmd: python scripts/verify_prefix_dataset.py
+    deps:
+      - params.yaml
+      - scripts/verify_prefix_dataset.py
+      - src/femto_rul/features/prefix.py
+      - data/processed/prefix_train_v1.parquet

@@ -1,0 +1,102 @@
+experiment:
+  mlflow_experiment_name: femto-rul-development
+  benchmark_version: prefix-direct-rul-v1
+  random_state: 42
+  prefix_fractions:
+    - 0.40
+    - 0.45
+    - 0.50
+    - 0.55
+    - 0.60
+    - 0.65
+    - 0.70
+    - 0.75
+    - 0.80
+    - 0.85
+    - 0.90
+    - 0.95
+  primary_metric: mean_rmse
+  expected_training_bearings: 6
+  expected_prefix_rows: 72
+  test_accessed: false
+  validation_accessed: false
+
+models:
+  E100:
+    name: condition_life_prior
+    description: Condition-specific lifetime prior; canonical non-ML baseline.
+  E101:
+    name: median
+    description: Median direct-RUL baseline on canonical prefix samples.
+  E102:
+    name: ridge
+    description: Scaled linear direct-RUL baseline.
+  E103:
+    name: knn
+    description: Distance-weighted KNN direct-RUL baseline.
+  E104:
+    name: random_forest
+    description: Canonical champion baseline from Phase 10 direct-RUL formulation.
+  E105:
+    name: extra_trees
+    description: ExtraTrees direct-RUL comparison.
+  E106:
+    name: hist_gradient_boosting
+    description: Histogram gradient boosting direct-RUL comparison.
+  E107:
+    name: xgboost
+    description: XGBoost direct-RUL comparison.
+  E108:
+    name: lightgbm
+    description: LightGBM direct-RUL comparison.
+
+model_defaults:
+  ridge:
+    alpha: 10.0
+  knn:
+    n_neighbors: 3
+    weights: distance
+  random_forest:
+    n_estimators: 500
+    min_samples_leaf: 2
+    max_features: sqrt
+  extra_trees:
+    n_estimators: 500
+    min_samples_leaf: 2
+    max_features: sqrt
+  hist_gradient_boosting:
+    max_iter: 300
+    learning_rate: 0.05
+    max_leaf_nodes: 15
+    l2_regularization: 1.0
+  xgboost:
+    n_estimators: 500
+    max_depth: 3
+    learning_rate: 0.03
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_lambda: 1.0
+    objective: reg:squarederror
+  lightgbm:
+    n_estimators: 500
+    learning_rate: 0.03
+    num_leaves: 15
+    min_child_samples: 5
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_lambda: 1.0
+    verbosity: -1
+
+hpo:
+  n_trials: 30
+  timeout_seconds: 1800
+  supported_models:
+    - random_forest
+    - extra_trees
+    - xgboost
+    - lightgbm
+
+registry:
+  model_name: femto-rul-model
+  candidate_alias: candidate
+  semantic_version: 0.1.0

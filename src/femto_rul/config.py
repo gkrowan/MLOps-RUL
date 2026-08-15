@@ -271,3 +271,6 @@ CONDITIONS: Final[dict[int, dict[str, int]]] = {
         "radial_load_n": 5000,
     },
 }
+
+MLFLOW_RUN_OWNER = env("MLFLOW_RUN_OWNER", "unknown")
+MLFLOW_TEAM = env("MLFLOW_TEAM", "FEMTO-RUL")
