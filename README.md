@@ -15,12 +15,14 @@ See [femto_mlops_project_plan.md](femto_mlops_project_plan.md) for the week-by-w
 ## Repo structure
 
 ```
-data/                   raw FEMTO dataset (gitignored — see "Setup" below)
-src/femto_rul/          installable package: config, ingestion, labeling, features, splits
-scripts/verify_data.py  data integrity verification (delimiter quirks, gaps, shape checks)
-docs/data_notes.md      dataset quirks and labeling/schema decisions — read before touching ingestion
-notebooks/              EDA and exploratory work
+data/raw/               DVC-managed immutable FEMTO source directories
+data/processed/         generated ML-ready feature/ground-truth artifacts
+src/femto_rul/          installable package: config, ingestion, labeling, features, pipeline
+scripts/                raw validation + processed dataset build/validation CLIs
+docs/                   data contract, MLOps rollout, deployment/runbooks
+notebooks/              EDA and exploratory work only
 tests/                  pytest suite
+dvc.yaml                reproducible raw-validation + processed-data pipeline
 ```
 
 ## Setup
@@ -34,18 +36,46 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Download the FEMTO dataset (link above) and place it under `data/` so it looks like
-`data/Training_set/`, `data/Test_set/`, `data/Validation_Set/` (each full of `Bearing{condition}_{unit}/`
-directories). `data/` is gitignored — the dataset isn't committed to the repo; put your local
-download there, and the team's shared/preprocessed copy will live on the shared drive instead.
+Raw FEMTO data is versioned with DVC and stored in the team's MinIO bucket. After
+configuring the MinIO S3 endpoint and local-only credentials, reproduce the source data with:
 
-Then verify your local copy matches expectations:
+```bash
+dvc pull
+```
+
+The expected source layout is:
+
+```text
+data/raw/
+├── Training_set/
+├── Test_set/
+└── Validation_Set/
+```
+
+`Training_set` is development/training data, `Test_set` is the official truncated holdout
+input, and `Validation_Set` is used only to derive official holdout ground truth. See
+`docs/data_contract.md` before changing data/modeling code.
+
+Verify raw data and run tests:
 
 ```bash
 python scripts/verify_data.py
+pytest -q
 ```
 
-Run tests with `pytest`.
+Build the production-safe processed artifacts:
+
+```bash
+python scripts/build_datasets.py --mode all
+python scripts/verify_processed_data.py
+```
+
+Or run the reproducible DVC pipeline:
+
+```bash
+dvc repro
+dvc push
+```
 
 ## Local MLOps stack
 
@@ -66,6 +96,7 @@ On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
 | MLflow + Model Registry | http://localhost:5000 | none (local only) |
 | Grafana | http://localhost:3000 | `admin` / `admin` by default |
 | MinIO console | http://localhost:9001 | `minio` / `minio-local` by default |
+| MinIO S3 API | http://localhost:9000 | DVC / object-storage clients |
 
 In Airflow, enable and manually trigger the `femto_rul_training` DAG. Its smoke-test
 model uses synthetic regression data so the integration can be tested before the

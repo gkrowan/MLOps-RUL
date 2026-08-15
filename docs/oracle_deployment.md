@@ -2,7 +2,7 @@
 
 This profile targets the project's Ubuntu 24.04 ARM64 instance. All web UIs bind
 to the instance loopback interface, so they are reachable only through SSH. Do
-not add public ingress rules for ports 3000, 5000, 8080, or 9001.
+not add public ingress rules for ports 3000, 5000, 8080, 9000, or 9001.
 
 ## 1. Prepare the repository
 
@@ -42,13 +42,15 @@ ssh -N `
   -L 8080:127.0.0.1:8080 `
   -L 5000:127.0.0.1:5000 `
   -L 3000:127.0.0.1:3000 `
+  -L 9000:127.0.0.1:9000 `
   -L 9001:127.0.0.1:9001 `
   ubuntu@207.211.182.178
 ```
 
 Then open Airflow at <http://localhost:8080>, MLflow at
-<http://localhost:5000>, Grafana at <http://localhost:3000>, and MinIO at
-<http://localhost:9001>. Credentials are stored in the server's `.env` file.
+<http://localhost:5000>, Grafana at <http://localhost:3000>, and the MinIO console at
+<http://localhost:9001>. DVC and other S3-compatible clients use the MinIO API at
+<http://localhost:9000>. Credentials are stored in the server's `.env` file.
 
 ## 4. Verify and operate
 

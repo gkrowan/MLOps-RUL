@@ -1,0 +1,113 @@
+schema: '2.0'
+stages:
+  verify_raw:
+    cmd: python scripts/verify_data.py
+    deps:
+    - path: data/raw/Test_set
+      hash: md5
+      md5: c5fa5af71e61ff3703764ca1aca93f1e.dir
+      size: 1152306837
+      nfiles: 15686
+    - path: data/raw/Training_set
+      hash: md5
+      md5: dfcdd9eb89ee36d19a2e6cc88ec61e5e.dir
+      size: 601754908
+      nfiles: 8385
+    - path: data/raw/Validation_Set
+      hash: md5
+      md5: a006371f7987d5f2f33d57cc101d3e72.dir
+      size: 1428814267
+      nfiles: 19524
+    - path: scripts/verify_data.py
+      hash: md5
+      md5: 6b78eb8eb5870ad114bbe8dcdc3b76f6
+      size: 17997
+    - path: src/femto_rul/config.py
+      hash: md5
+      md5: 47e1bd4b6232d2eb42729dfb1df6ab28
+      size: 8200
+  build_processed:
+    cmd: python scripts/build_datasets.py --mode all
+    deps:
+    - path: data/raw/Test_set
+      hash: md5
+      md5: c5fa5af71e61ff3703764ca1aca93f1e.dir
+      size: 1152306837
+      nfiles: 15686
+    - path: data/raw/Training_set
+      hash: md5
+      md5: dfcdd9eb89ee36d19a2e6cc88ec61e5e.dir
+      size: 601754908
+      nfiles: 8385
+    - path: data/raw/Validation_Set
+      hash: md5
+      md5: a006371f7987d5f2f33d57cc101d3e72.dir
+      size: 1428814267
+      nfiles: 19524
+    - path: scripts/build_datasets.py
+      hash: md5
+      md5: 5b13f5097b0667308c23d2851e1a2a7a
+      size: 2582
+    - path: src/femto_rul/config.py
+      hash: md5
+      md5: 47e1bd4b6232d2eb42729dfb1df6ab28
+      size: 8200
+    - path: src/femto_rul/features
+      hash: md5
+      md5: 253d64a1d66ae93c2f890f0c375255dd.dir
+      size: 15162
+      nfiles: 8
+    - path: src/femto_rul/ingestion
+      hash: md5
+      md5: 4d0fc00080ace8aaf9d5c4d9b872735e.dir
+      size: 7227
+      nfiles: 4
+    - path: src/femto_rul/labeling
+      hash: md5
+      md5: 9126fce24ec47aa81e02df55575dabde.dir
+      size: 5799
+      nfiles: 4
+    - path: src/femto_rul/pipeline.py
+      hash: md5
+      md5: 5fd33bd9460a0d8ad75715f862e7d557
+      size: 8858
+    outs:
+    - path: data/processed/feature_schema.json
+      hash: md5
+      md5: 526da1315dc0bb663dccc7ea0959cab7
+      size: 3178
+    - path: data/processed/test_features.parquet
+      hash: md5
+      md5: 33ddcc0a74e817d976084c9f7f7fc5f2
+      size: 3321843
+    - path: data/processed/test_ground_truth.parquet
+      hash: md5
+      md5: 44837806a229e18e24c23e1a5fbace30
+      size: 50281
+    - path: data/processed/train_features.parquet
+      hash: md5
+      md5: 7d1df81fc1e40b90f6d115606d4c0f42
+      size: 1822755
+  verify_processed:
+    cmd: python scripts/verify_processed_data.py
+    deps:
+    - path: data/processed/feature_schema.json
+      hash: md5
+      md5: 526da1315dc0bb663dccc7ea0959cab7
+      size: 3178
+    - path: data/processed/test_features.parquet
+      hash: md5
+      md5: 33ddcc0a74e817d976084c9f7f7fc5f2
+      size: 3321843
+    - path: data/processed/test_ground_truth.parquet
+      hash: md5
+      md5: 44837806a229e18e24c23e1a5fbace30
+      size: 50281
+    - path: data/processed/train_features.parquet
+      hash: md5
+      md5: 7d1df81fc1e40b90f6d115606d4c0f42
+      size: 1822755
+    - path: scripts/verify_processed_data.py
+      hash: md5
+      md5: 72c44ac48f7f5bc460ebe0355faec14d
+      size: 4808
