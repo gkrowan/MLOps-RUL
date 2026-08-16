@@ -13,6 +13,13 @@ x-airflow-common: &airflow-common
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-mlops}:${POSTGRES_PASSWORD:-mlops-local}@postgres:5432/airflow
     AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-local-airflow-secret-key}
     MLFLOW_TRACKING_URI: http://mlflow:5000
+    MINIO_ENDPOINT_URL: http://minio:9000
+    AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+    AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio-local}
+    RAW_DATA_BUCKET: ${RAW_DATA_BUCKET:-raw-data}
+    RAW_DATA_PREFIX: ${RAW_DATA_PREFIX:-}
+    FEATURE_TABLE_NAME: ${FEATURE_TABLE_NAME:-femto_features}
+    FEATURE_STORE_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-mlops}:${POSTGRES_PASSWORD:-mlops-local}@postgres:5432/postgres
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
