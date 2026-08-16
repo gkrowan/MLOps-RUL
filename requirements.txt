@@ -27,5 +27,13 @@ psycopg2-binary==2.9.10
 # 2026-08-14) — resolves cleanly, no downgrade needed.
 evidently==0.7.21
 
+# api/ — FastAPI serving for the MLflow champion model. Also installed in
+# docker/api/requirements.txt for the container image; pinned here too so
+# `uvicorn api.main:app --reload` works from a local dev venv per the
+# module's own docstring.
+fastapi==0.141.1
+uvicorn==0.52.3
+pydantic==2.13.4
+
 # install this repo's own package (src/femto_rul) in editable mode
 -e .
