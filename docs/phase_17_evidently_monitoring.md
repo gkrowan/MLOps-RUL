@@ -6,7 +6,34 @@
 
 ---
 
-## Scaffolding status (2026-08-14)
+## Addendum (2026-08-15) — Prefix V1 realignment
+
+The registered champion model (Phase 14's `api/main.py`, which landed on
+`main` while this scaffolding sat blocked) serves **Prefix V1** features
+(`features/prefix.py::prefix_feature_columns()`, 21 columns), not the 24 raw
+`FEATURE_COLUMNS_V1` columns this doc originally designed against. Monitoring
+the wrong feature set would defeat the point of drift detection, so:
+
+- Reference distribution moved from `data/processed/train_features.parquet`
+  to `data/processed/prefix_train_v1.parquet` (built by
+  `scripts/build_prefix_dataset.py`; path already defined as
+  `experiments.config.PREFIX_DATASET_PATH`) — the actual training
+  distribution for the features the model consumes.
+- `column_mapping.py`/`current.py`/`reference.py` now key off
+  `features.prefix.prefix_feature_columns()` (21 columns) instead of
+  `pipeline.FEATURE_COLUMNS_V1` (24 columns, now removed — see the Phase 16
+  doc's addendum). §3/§4 below describe the original 24-column design;
+  the live code is the source of truth where they disagree.
+- `report.py` needed no change — it was already decoupled, only depending on
+  `column_mapping.build_data_definition()`.
+- Verified: `tests/test_monitoring.py` (all 5, synthetic data, no DB) passes
+  against the 21-column `DataDefinition`; `load_reference_features()`'s
+  missing-file/missing-column error paths verified too. Generating the real
+  `configs/monitoring_reference_ranges.json` from actual training data is
+  still blocked — `prefix_train_v1.parquet` needs a `dvc pull`/`dvc repro`
+  this environment doesn't have raw data for (unchanged from before).
+
+## Scaffolding status (2026-08-14, superseded in part — see addendum above)
 
 Built ahead of Phase 5/6/14, since column mapping and report-building are pure functions testable with synthetic data:
 
@@ -16,17 +43,20 @@ DONE  requirements.txt                       — evidently==0.7.21, verified aga
                                                  dry-run install (no downgrade needed —
                                                  the §2 compatibility risk did not
                                                  materialize, see below)
-DONE  src/femto_rul/monitoring/column_mapping.py — DataDefinition from FEATURE_COLUMNS_V1
-DONE  src/femto_rul/monitoring/reference.py      — loads/validates train_features.parquet
-DONE  src/femto_rul/monitoring/current.py        — reads the predictions table (Phase 16)
+DONE  src/femto_rul/monitoring/column_mapping.py — DataDefinition from prefix_feature_columns()
+DONE  src/femto_rul/monitoring/reference.py      — loads/validates prefix_train_v1.parquet
+DONE  src/femto_rul/monitoring/current.py        — reads the predictions table (Phase 16),
+                                                     now storing Prefix V1 columns
 DONE  src/femto_rul/monitoring/report.py         — build_report/save_report/drifted_column_share
 DONE  scripts/run_monitoring_report.py           — CLI, non-zero exit on drift over threshold
-DONE  scripts/generate_reference_ranges.py       — CLI, not yet run (needs train_features.parquet)
+DONE  scripts/generate_reference_ranges.py       — CLI, not yet run (needs prefix_train_v1.parquet)
 DONE  tests/test_monitoring.py                   — all pass locally, no DB/network needed
 
 STILL BLOCKED  — reference.load_reference_features() will raise FileNotFoundError
-                  until Phase 5/6 produce train_features.parquet; current.py needs
-                  Phase 16's predictions table populated by a live Phase 14 endpoint.
+                  until data/processed/prefix_train_v1.parquet is materialized
+                  (needs dvc pull of raw data + dvc repro, out of scope for this pass);
+                  current.py now reads real Prefix V1 rows once /predict traffic flows
+                  (Phase 16's endpoint wiring is done — see its doc's addendum).
 ```
 
 **API correction:** evidently 0.7.21's actual API is not what §4/§5 below
@@ -103,6 +133,10 @@ If Evidently can't run inside the application's pinned environment, the fallback
 
 # 3. Reference vs. Current Dataset Definition
 
+> **Superseded by the 2026-08-15 addendum above.** "24 model input columns"
+> below means the 21 Prefix V1 columns in the live code; reference is
+> `prefix_train_v1.parquet`, not `train_features.parquet`.
+
 ## Reference (baseline)
 
 ```text
@@ -132,6 +166,9 @@ Window size (`%s` above) should be a CLI parameter, not hard-coded — a course-
 
 # 4. Column Mapping (DONE — `src/femto_rul/monitoring/column_mapping.py`)
 
+> **Column source superseded by the 2026-08-15 addendum** — see the code
+> block below for the current version.
+
 evidently 0.7.21 dropped `ColumnMapping` in favor of `DataDefinition` +
 `Dataset.from_pandas(data_definition=...)` — verified by installing the
 pinned version and inspecting its actual API (see the scaffolding-status
@@ -139,14 +176,16 @@ note above). Built:
 
 ```python
 from evidently import DataDefinition
-from femto_rul.pipeline import FEATURE_COLUMNS_V1
+from femto_rul.features.prefix import prefix_feature_columns
 
 def build_data_definition() -> DataDefinition:
-    return DataDefinition(numerical_columns=list(FEATURE_COLUMNS_V1))
+    return DataDefinition(numerical_columns=list(prefix_feature_columns()))
 ```
 
-Source is `pipeline.FEATURE_COLUMNS_V1`, not `feature_schema.json` — see
-the "design change" note in the scaffolding-status section above for why.
+Source is `features.prefix.prefix_feature_columns()` — the same feature
+schema the served model and `api/main.py`'s request contract already use —
+not `feature_schema.json` (which is Phase 5's raw-24-column output and
+doesn't match what the model actually consumes).
 No categorical columns yet (operating condition isn't part of the served
 feature vector — revisit if Phase 4's "condition as legitimate predictor"
 experiment lands). `predicted_rul_seconds` is deliberately not declared
@@ -178,8 +217,8 @@ resolved rather than removed, so the reasoning stays visible.
 ```text
 src/femto_rul/monitoring/
 ├── __init__.py
-├── column_mapping.py   # DataDefinition from pipeline.FEATURE_COLUMNS_V1
-├── reference.py         # loads + validates train_features.parquet; also
+├── column_mapping.py   # DataDefinition from features.prefix.prefix_feature_columns()
+├── reference.py         # loads + validates prefix_train_v1.parquet; also
 │                         # exposes load_reference_targets() for §Change 2's
 │                         # rul_seconds sanity comparison
 ├── current.py            # reads predictions table (Phase 16) for a time window
@@ -215,15 +254,15 @@ for the CLI's pass/fail exit code. `prediction_sanity_summary()` handles
 Evidently target/prediction comparison — see the design-change note above.
 
 Verified end-to-end against synthetic data before writing this into the
-plan: a 5-sigma shift across all 24 columns reads as `drifted_column_share
+plan: a 5-sigma shift across all 21 columns reads as `drifted_column_share
 > 0.5`; identical distributions read as `< 0.2`. `tests/test_monitoring.py`
 encodes both cases.
 
 ---
 
-## Change 3 — Reference range config (script DONE, not yet run — needs train_features.parquet)
+## Change 3 — Reference range config (script DONE, not yet run — needs prefix_train_v1.parquet)
 
-Built `scripts/generate_reference_ranges.py`, calling `monitoring.reference.load_reference_features()` and writing 1st/99th percentiles per column. Hasn't been run yet — `data/processed/train_features.parquet` doesn't exist until Phase 5/6 land (today there's only the legacy combined `features.parquet`, which is reference-only per Phase 1 and must not be substituted here).
+Built `scripts/generate_reference_ranges.py`, calling `monitoring.reference.load_reference_features()` and writing 1st/99th percentiles per column. Hasn't been run yet — `data/processed/prefix_train_v1.parquet` doesn't exist locally in this environment (its DVC pipeline stage needs raw data pulled from the remote first; see the 2026-08-15 addendum).
 
 ```json
 {
@@ -291,9 +330,9 @@ MONITORING_REFERENCE_RANGES_PATH: Final[Path] = (
 `tests/test_monitoring.py` (all pass, `pytest -q` — no live Postgres or network dependency):
 
 ```text
-- build_data_definition() returns exactly pipeline.FEATURE_COLUMNS_V1, in order
+- build_data_definition() returns exactly features.prefix.prefix_feature_columns(), in order
 - load_reference_features() raises FileNotFoundError on a missing path,
-  and ValueError if the parquet is missing expected Feature Set V1 columns
+  and ValueError if the parquet is missing expected Prefix V1 columns
 - build_report() on a 5-sigma-shifted synthetic current set reports
   drifted_column_share > 0.5
 - build_report() on two draws from the same distribution reports
@@ -309,10 +348,10 @@ MONITORING_REFERENCE_RANGES_PATH: Final[Path] = (
 ```text
 MLOps-RUL/
 ├── configs/
-│   └── monitoring_reference_ranges.json          NOT YET GENERATED (script ready, needs train_features.parquet)
+│   └── monitoring_reference_ranges.json          NOT YET GENERATED (script ready, needs prefix_train_v1.parquet)
 ├── src/femto_rul/
 │   ├── config.py                                 (+ monitoring paths) DONE
-│   ├── pipeline.py                                (+ FEATURE_COLUMNS_V1) DONE
+│   ├── features/prefix.py                        (prefix_feature_columns(), source of truth) DONE
 │   └── monitoring/                                DONE
 │       ├── __init__.py
 │       ├── column_mapping.py
@@ -332,14 +371,14 @@ MLOps-RUL/
 # 7. Phase 17 Acceptance Criteria
 
 - [x] `evidently` pinned in `requirements.txt`, compatibility with pandas 3.0.5 verified and recorded (dry-run install, 2026-08-14 — no downgrade needed)
-- [x] column mapping is generated from a single source of truth (`pipeline.FEATURE_COLUMNS_V1`), not duplicated by hand
-- [x] reference dataset excludes `rul_seconds` and all leakage columns *(enforced by `load_reference_features` selecting only `FEATURE_COLUMNS_V1`)*
+- [x] column mapping is generated from a single source of truth (`features.prefix.prefix_feature_columns()`), not duplicated by hand *(2026-08-15: realigned from `pipeline.FEATURE_COLUMNS_V1` to match what the served model actually consumes)*
+- [x] reference dataset excludes `rul_seconds` and all leakage columns *(enforced by `load_reference_features` selecting only `prefix_feature_columns()`)*
 - [x] current dataset excludes `status='error'` rows *(enforced in `current.py`'s query)*
-- [ ] report runs against `test_features.parquet` as a dry run before any live traffic exists (blocked: `test_features.parquet` doesn't exist yet — Phase 5)
-- [ ] report runs against the `predictions` table once Phase 16 has rows (blocked on Phase 14 populating it)
+- [ ] report runs against a dry-run dataset before any live traffic exists (still blocked — needs `prefix_train_v1.parquet`, which needs a `dvc pull`/`dvc repro` this environment doesn't have raw data for)
+- [x] report runs against the `predictions` table once Phase 16 has rows *(Phase 16's `/predict` wiring is done — see its doc's addendum; `current.py` now reads real Prefix V1 rows)*
 - [x] HTML + JSON output saved under `artifacts/monitoring/` *(verified via `tests/test_monitoring.py`'s `save_report` test, using a tmp_path)*
-- [ ] reference percentile ranges are generated from `Training_set`, not hard-coded (script built, not yet runnable — needs train_features.parquet)
-- [x] tests pass without a live Postgres or network dependency (`pytest -q` — all monitoring tests pass)
+- [ ] reference percentile ranges are generated from `Training_set`, not hard-coded (script built, not yet runnable — needs `prefix_train_v1.parquet`)
+- [x] tests pass without a live Postgres or network dependency (`pytest -q` — all monitoring tests pass, verified against the 21-column Prefix V1 schema)
 
 ---
 

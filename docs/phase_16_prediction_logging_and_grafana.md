@@ -6,25 +6,35 @@
 
 ---
 
-## Scaffolding status (2026-08-14)
+## Addendum (2026-08-15) — Prefix V1 realignment, `/predict` wiring, containerization
+
+`main` landed Phase 14 (`api/main.py`, the real `/predict` endpoint) while this scaffolding sat blocked — but it serves **Prefix V1** features (`features/prefix.py::prefix_feature_columns()`, 21 derived columns: `observed_age_seconds`, `rotation_speed_rpm`, `radial_load_n`, plus `current_over_early`/`recent_mean_over_early`/`recent_slope_per_hour` per source signal), not the 24 raw `FEATURE_COLUMNS_V1` columns this doc originally designed against. That's what the registered champion model was actually trained on. Logging/monitoring the wrong feature set would defeat the point of drift monitoring, so:
+
+- `pipeline.FEATURE_COLUMNS_V1` is **removed** — `docker/postgres/init.sql`'s `predictions` table, `serving/telemetry.py`, and all of `monitoring/` now key off `features/prefix.py::prefix_feature_columns()` instead. §4's schema below is superseded — the live DDL is the source of truth.
+- `log_prediction()` is now called from `api/main.py`'s `/predict` (§5 Change 4 is done, not blocked) — success and failure both log a row, with `feature_set_version="prefix_v1"`, wrapped so a logging failure never fails the response.
+- Phase 15 (containerizing the API) landed alongside this: `docker/api/{Dockerfile,requirements.txt}` + an `api` service in `docker-compose.yml`, on the compose network per §2/§3's original decision.
+- Verified: `docker compose up postgres`, real Postgres round-trip tests (`tests/test_telemetry.py`, new `tests/test_api_predict_logging.py`) pass against the live schema. Full `docker compose up` of `api` was also verified — it builds, starts, reaches `mlflow`, and fails at exactly the expected point (`Registered model alias champion not found`, no champion registered in this dev environment yet), not on an import/config error.
+
+## Scaffolding status (2026-08-14, superseded in part — see addendum above)
 
 Built ahead of Phase 14/15, since none of it requires a live API to exist yet:
 
 ```text
 DONE  docker/postgres/init.sql        — inference DB + predictions table + indexes
+                                         (schema now Prefix V1, see addendum)
 DONE  src/femto_rul/config.py         — INFERENCE_DB_HOST/PORT/NAME, PREDICTIONS_TABLE, POSTGRES_USER
-DONE  src/femto_rul/pipeline.py       — FEATURE_COLUMNS_V1 (single source of truth for column order)
+DONE  src/femto_rul/features/prefix.py — prefix_feature_columns() (single source of truth
+                                         for column order; supersedes pipeline.FEATURE_COLUMNS_V1)
 DONE  src/femto_rul/db.py             — shared Postgres connection helper
-DONE  src/femto_rul/serving/telemetry.py — log_prediction(), tested
+DONE  src/femto_rul/serving/telemetry.py — log_prediction(), tested, now wired into /predict
 DONE  grafana/provisioning/datasources/inference-postgres.yml
 DONE  grafana/provisioning/dashboards/{dashboards.yml, prediction_logging.json}
-DONE  requirements.txt                — psycopg2-binary==2.9.10
+DONE  requirements.txt                — psycopg2-binary==2.9.10, fastapi/uvicorn/pydantic
 DONE  tests/test_telemetry.py         — validation tests run always; insert/round-trip
                                          tests skip cleanly without a reachable Postgres
-
-STILL BLOCKED ON PHASE 14  — nothing calls log_prediction() yet; there is no
-                              /predict endpoint. §5 Change 4 below describes
-                              the integration point once api/ exists.
+DONE  tests/test_api_predict_logging.py — /predict → log_prediction → real Postgres row,
+                                         success and error paths
+DONE  docker/api/{Dockerfile,requirements.txt} + docker-compose.yml `api` service (Phase 15)
 ```
 
 One deliberate deviation from the original plan below: `telemetry.py` lives in
@@ -109,6 +119,13 @@ Phase 16 adds its own database (`inference`) and its own Grafana datasource (`in
 ---
 
 # 4. Prediction Log Schema
+
+> **Superseded by the 2026-08-15 addendum above.** The column list below is
+> the original 24-column raw Feature Set V1 design. The live table instead
+> has the 21 Prefix V1 columns from `features/prefix.py::prefix_feature_columns()`
+> — see `docker/postgres/init.sql` for the actual DDL. The "one wide table,
+> not JSONB" design decision and everything else in this section still holds;
+> only the column list itself is out of date.
 
 ## Design decision: one wide table, not JSONB
 
@@ -238,43 +255,42 @@ This is consistent with Phase 15's own acceptance gate ("reaches MLflow"). Flag 
 
 ---
 
-## Change 4 — Logging module (DONE, built in `src/femto_rul/serving/`)
+## Change 4 — Logging module (DONE, built in `src/femto_rul/serving/`, wired into `/predict`)
 
 Built as `src/femto_rul/db.py` (shared connection helper, host/port from
 `config.INFERENCE_DB_HOST`/`INFERENCE_DB_PORT`, password via
 `config.require_env("POSTGRES_PASSWORD")` at connection time) and
 `src/femto_rul/serving/telemetry.py` (`log_prediction(...)`), not `api/` —
 see the deviation note at the top of this document for why. Validates
-`status` and, on `status="ok"`, that every `pipeline.FEATURE_COLUMNS_V1`
-column is present before opening a connection, so a malformed call fails
-fast with a clear `ValueError` instead of a partial insert.
+`status` and, on `status="ok"`, that every
+`features.prefix.prefix_feature_columns()` column is present before
+opening a connection, so a malformed call fails fast with a clear
+`ValueError` instead of a partial insert.
 
-Phase 14's `POST /predict` will call it like this once it exists:
+`api/main.py`'s `POST /predict` now calls it (2026-08-15 addendum), via a
+`_log_prediction_safely()` wrapper so a logging failure can't fail the
+response:
 
 ```python
-import time
-import uuid
-
-from femto_rul.serving.telemetry import log_prediction
-
 request_id = str(uuid.uuid4())
+payload = features.model_dump()
 start = time.perf_counter()
 try:
-    prediction = model.predict(features)
-    status, error_message = "ok", None
+    prediction = model_state["model"].predict(input_df)
+    predicted_value = max(0.0, float(prediction[0]))
 except Exception as exc:
-    prediction, status, error_message = None, "error", str(exc)
-latency_ms = (time.perf_counter() - start) * 1000
-
-try:
-    log_prediction(
-        request_id=request_id, model_name=..., model_version=..., model_alias=...,
-        feature_set_version="v1", features=features if status == "ok" else None,
-        predicted_rul_seconds=prediction, latency_ms=latency_ms,
-        status=status, error_message=error_message,
+    _log_prediction_safely(
+        request_id=request_id, features=None, predicted_rul_seconds=None,
+        latency_ms=(time.perf_counter() - start) * 1000,
+        status="error", error_message=str(exc),
     )
-except Exception:
-    logger.exception("prediction logging failed")  # best-effort; never fail the response
+    raise HTTPException(status_code=500, detail="Prediction failed") from exc
+
+_log_prediction_safely(
+    request_id=request_id, features=payload, predicted_rul_seconds=predicted_value,
+    latency_ms=(time.perf_counter() - start) * 1000,
+    status="ok", error_message=None,
+)
 ```
 
 A logging failure must never fail the prediction response — the `try/except`
@@ -364,7 +380,9 @@ These need a real Postgres to run against (or `testcontainers`) — do not mock 
 
 ```text
 MLOps-RUL/
-├── docker/postgres/init.sql                       (+ inference database + predictions table) DONE
+├── docker/
+│   ├── postgres/init.sql                          (+ inference database + predictions table) DONE
+│   └── api/{Dockerfile,requirements.txt}           DONE (Phase 15)
 ├── grafana/provisioning/
 │   ├── datasources/
 │   │   ├── postgres.yml                            (unchanged)
@@ -374,30 +392,33 @@ MLOps-RUL/
 │       └── prediction_logging.json                 DONE
 ├── src/femto_rul/
 │   ├── config.py                                   (+ inference/monitoring constants) DONE
-│   ├── pipeline.py                                  (+ FEATURE_COLUMNS_V1) DONE
+│   ├── features/prefix.py                          (prefix_feature_columns(), source of truth) DONE
 │   ├── db.py                                        DONE
 │   └── serving/
 │       ├── __init__.py                              DONE
 │       └── telemetry.py                             DONE
+├── api/main.py                                     (+ log_prediction() wiring) DONE
+├── docker-compose.yml                              (+ api service) DONE
 ├── tests/test_telemetry.py                          DONE
+├── tests/test_api_predict_logging.py                DONE
 └── docs/phase_16_prediction_logging_and_grafana.md  (this file)
 ```
 
-Still to come, blocked on Phase 14/15: `api/` itself, and actually calling `log_prediction()` from a live endpoint.
+`pipeline.py` no longer has a `FEATURE_COLUMNS_V1` constant — it was Phase 16's original source of truth and is superseded by `features/prefix.py::prefix_feature_columns()` (see 2026-08-15 addendum).
 
 ---
 
 # 7. Phase 16 Acceptance Criteria
 
 - [x] `inference` database exists and is created by `init.sql` on a fresh volume
-- [x] `predictions` table matches the schema in §4
-- [ ] every `/predict` call — success or failure — produces exactly one row (blocked: no `/predict` yet)
-- [x] a logging failure does not fail the prediction response *(by contract — `telemetry.py` raises on bad input, doesn't swallow errors; the call site in Phase 14 is responsible for catch-and-continue)*
+- [x] `predictions` table matches the live Prefix V1 schema (§4's original schema is superseded, see addendum)
+- [x] every `/predict` call — success or failure — produces exactly one row *(verified: `tests/test_api_predict_logging.py` against a real Postgres)*
+- [x] a logging failure does not fail the prediction response *(`telemetry.py` raises on bad input; `api/main.py`'s `_log_prediction_safely()` wraps the call site with catch-and-continue)*
 - [x] `inference-postgres.yml` datasource is added without modifying the existing `postgres.yml`
 - [x] Grafana dashboard shows request count, latency, error rate, throughput, active model version
-- [ ] FastAPI service reaches `postgres:5432` via the compose network, not `localhost` (blocked on Phase 15)
+- [x] FastAPI service reaches `postgres:5432` via the compose network, not `localhost` *(Phase 15 done — `docker/api/` + compose `api` service; verified: container starts and reaches `postgres`/`mlflow`, fails only on no-champion-registered)*
 - [x] no credentials are hard-coded in `telemetry.py`/`db.py` (reused from existing env vars)
-- [x] tests exist and skip cleanly without a reachable Postgres (verified: `pytest -q` → 2 skipped, rest pass)
+- [x] tests exist and skip cleanly without a reachable Postgres (verified: full `pytest -q` run against `docker compose up postgres` — 52 passed, 10 skipped)
 
 ---
 
