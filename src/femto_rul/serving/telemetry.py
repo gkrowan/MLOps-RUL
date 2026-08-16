@@ -14,7 +14,9 @@ from __future__ import annotations
 
 from femto_rul import config
 from femto_rul.db import get_connection
-from femto_rul.pipeline import FEATURE_COLUMNS_V1
+from femto_rul.features.prefix import prefix_feature_columns
+
+PREFIX_FEATURE_COLUMNS = prefix_feature_columns()
 
 _STATUSES = ("ok", "error")
 
@@ -34,7 +36,7 @@ def log_prediction(
 ) -> None:
     """Insert one row into the predictions table.
 
-    features must contain exactly pipeline.FEATURE_COLUMNS_V1 on a
+    features must contain exactly prefix.prefix_feature_columns() on a
     successful ("ok") prediction; pass None (or an empty dict) on error.
     """
     if status not in _STATUSES:
@@ -42,7 +44,7 @@ def log_prediction(
 
     features = features or {}
     if status == "ok":
-        missing = set(FEATURE_COLUMNS_V1) - set(features)
+        missing = set(PREFIX_FEATURE_COLUMNS) - set(features)
         if missing:
             raise ValueError(
                 f"missing feature columns for a successful prediction: {sorted(missing)}"
@@ -54,7 +56,7 @@ def log_prediction(
         "model_version",
         "model_alias",
         "feature_set_version",
-        *FEATURE_COLUMNS_V1,
+        *PREFIX_FEATURE_COLUMNS,
         "predicted_rul_seconds",
         "latency_ms",
         "status",
@@ -66,7 +68,7 @@ def log_prediction(
         model_version,
         model_alias,
         feature_set_version,
-        *[features.get(name) for name in FEATURE_COLUMNS_V1],
+        *[features.get(name) for name in PREFIX_FEATURE_COLUMNS],
         predicted_rul_seconds,
         latency_ms,
         status,

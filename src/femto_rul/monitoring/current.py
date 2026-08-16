@@ -7,7 +7,7 @@ import pandas as pd
 
 from femto_rul import config
 from femto_rul.db import get_connection
-from femto_rul.pipeline import FEATURE_COLUMNS_V1
+from femto_rul.features.prefix import prefix_feature_columns
 
 
 def load_current_features(window: str = "24 hours") -> pd.DataFrame:
@@ -19,7 +19,7 @@ def load_current_features(window: str = "24 hours") -> pd.DataFrame:
     them would just show up as 100% missing-value drift, a signal already
     visible directly in Grafana's error-rate panel.
     """
-    columns = ", ".join(FEATURE_COLUMNS_V1)
+    columns = ", ".join(prefix_feature_columns())
     query = f"""
         SELECT {columns}
         FROM {config.PREDICTIONS_TABLE}

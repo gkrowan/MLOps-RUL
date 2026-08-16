@@ -1,4 +1,4 @@
-"""Run the Phase 17 Evidently drift/quality report: train_features.parquet
+"""Run the Phase 17 Evidently drift/quality report: prefix_train_v1.parquet
 (reference) vs. a trailing window of the predictions table (current).
 
 Exits non-zero if the drifted-column share crosses --fail-threshold, so this
@@ -31,7 +31,7 @@ def main() -> None:
     parser.add_argument("--fail-threshold", type=float, default=0.5)
     args = parser.parse_args()
 
-    print("Loading reference distribution (train_features.parquet)...")
+    print("Loading reference distribution (prefix_train_v1.parquet)...")
     reference_df = load_reference_features()
     reference_targets = load_reference_targets()
 

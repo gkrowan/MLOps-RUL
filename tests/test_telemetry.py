@@ -12,8 +12,10 @@ import pytest
 
 from femto_rul import config
 from femto_rul.db import get_connection
-from femto_rul.pipeline import FEATURE_COLUMNS_V1
+from femto_rul.features.prefix import prefix_feature_columns
 from femto_rul.serving.telemetry import log_prediction
+
+PREFIX_FEATURE_COLUMNS = prefix_feature_columns()
 
 
 def _require_db():
@@ -31,8 +33,8 @@ def test_log_prediction_rejects_invalid_status():
             model_name="m",
             model_version="1",
             model_alias="candidate",
-            feature_set_version="v1",
-            features={name: 0.0 for name in FEATURE_COLUMNS_V1},
+            feature_set_version="prefix_v1",
+            features={name: 0.0 for name in PREFIX_FEATURE_COLUMNS},
             predicted_rul_seconds=1.0,
             latency_ms=1.0,
             status="pending",
@@ -46,7 +48,7 @@ def test_log_prediction_rejects_missing_features_on_success():
             model_name="m",
             model_version="1",
             model_alias="candidate",
-            feature_set_version="v1",
+            feature_set_version="prefix_v1",
             features={},
             predicted_rul_seconds=1.0,
             latency_ms=1.0,
@@ -62,8 +64,8 @@ def test_log_prediction_writes_a_row():
         model_name="femto-rul-model",
         model_version="1",
         model_alias="candidate",
-        feature_set_version="v1",
-        features={name: float(i) for i, name in enumerate(FEATURE_COLUMNS_V1)},
+        feature_set_version="prefix_v1",
+        features={name: float(i) for i, name in enumerate(PREFIX_FEATURE_COLUMNS)},
         predicted_rul_seconds=123.4,
         latency_ms=5.6,
         status="ok",
@@ -73,7 +75,7 @@ def test_log_prediction_writes_a_row():
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT status, predicted_rul_seconds, rms_horiz "
+                "SELECT status, predicted_rul_seconds, observed_age_seconds "
                 "FROM predictions WHERE request_id = %s",
                 (request_id,),
             )
@@ -92,7 +94,7 @@ def test_log_prediction_writes_error_row_with_null_features():
         model_name="femto-rul-model",
         model_version="1",
         model_alias="candidate",
-        feature_set_version="v1",
+        feature_set_version="prefix_v1",
         features=None,
         predicted_rul_seconds=None,
         latency_ms=2.0,
@@ -104,7 +106,7 @@ def test_log_prediction_writes_error_row_with_null_features():
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT status, predicted_rul_seconds, rms_horiz, error_message "
+                "SELECT status, predicted_rul_seconds, observed_age_seconds, error_message "
                 "FROM predictions WHERE request_id = %s",
                 (request_id,),
             )

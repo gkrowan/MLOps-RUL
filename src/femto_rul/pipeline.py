@@ -22,10 +22,10 @@ from pathlib import Path
 import pandas as pd
 
 from femto_rul.config import FILE_INTERVAL_SECONDS
-from femto_rul.features.frequency_domain import fft_band_energy, fft_band_feature_names
+from femto_rul.features.frequency_domain import fft_band_energy
 from femto_rul.features.schema import CHANNEL_SPECS, GROUND_TRUTH_KEY_COLUMNS
 from femto_rul.features.temporal import add_causal_temporal_features
-from femto_rul.features.time_domain import TIME_DOMAIN_FEATURE_NAMES, time_domain_features
+from femto_rul.features.time_domain import time_domain_features
 from femto_rul.ingestion.raw_loader import file_index, list_bearing_files, load_acc_file
 from femto_rul.labeling.rul import label_full_run_bearing, label_truncated_bearing
 
@@ -54,16 +54,6 @@ def _concat(frames: list[pd.DataFrame], *, context: str) -> pd.DataFrame:
     if not frames:
         raise ValueError(f"no frames produced while building {context}")
     return pd.concat(frames, ignore_index=True)
-
-# Feature Set V1 column names, in the exact order extract_snapshot_features
-# produces them: per channel (horiz then vert), time-domain features then
-# FFT band energies. This is the single source of truth other modules
-# (serving telemetry, monitoring) should import rather than re-listing.
-FEATURE_COLUMNS_V1 = [
-    f"{name}_{channel_name}"
-    for channel_name, _ in CHANNEL_SPECS
-    for name in (TIME_DOMAIN_FEATURE_NAMES + fft_band_feature_names())
-]
 
 
 def extract_snapshot_features(acc_path: Path) -> dict[str, float]:

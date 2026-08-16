@@ -1,7 +1,8 @@
 """Generate configs/monitoring_reference_ranges.json from
-data/processed/train_features.parquet (Phase 5/6 output).
+data/processed/prefix_train_v1.parquet (see
+femto_rul.monitoring.reference for the reference-data contract).
 
-1st/99th percentile per Feature Set V1 column, from Training_set — not a
+1st/99th percentile per Prefix V1 column, from Training_set — not a
 hand-picked guess. Phase 17's monitoring and Phase 18's drift simulation
 both read this file, so they agree on what "in range" means for a feature.
 

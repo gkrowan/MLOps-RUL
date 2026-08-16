@@ -35,7 +35,7 @@ def build_report(reference_df: pd.DataFrame, current_df: pd.DataFrame) -> Snapsh
 
 
 def drifted_column_share(snapshot: Snapshot) -> float | None:
-    """Fraction of the 24 features flagged as drifted, read from the
+    """Fraction of the 21 features flagged as drifted, read from the
     DriftedColumnsCount metric. None if that metric isn't present (would
     mean DataDriftPreset didn't run)."""
     for metric in snapshot.dict()["metrics"]:
