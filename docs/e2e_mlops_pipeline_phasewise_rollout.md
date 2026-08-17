@@ -856,6 +856,8 @@ A clean Docker build starts FastAPI, reaches MLflow, loads the model, and answer
 
 # PHASE 16 — Prediction Logging + Grafana
 
+**Detailed implementation document:** `docs/phase_16_prediction_logging_and_grafana.md`
+
 ## Objective
 
 Monitor operational behavior.
@@ -883,6 +885,8 @@ Grafana should expose:
 ---
 
 # PHASE 17 — Evidently Data/Model Monitoring
+
+**Detailed implementation document:** `docs/phase_17_evidently_monitoring.md`
 
 ## Objective
 

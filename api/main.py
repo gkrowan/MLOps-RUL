@@ -25,6 +25,8 @@ No .env change is required for the current local setup.
 
 import logging
 import os
+import time
+import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -37,6 +39,7 @@ from pydantic import BaseModel, ConfigDict, create_model
 # Importing project config also preserves the project's existing .env loading.
 from femto_rul.config import MLFLOW_MODEL_NAME, MLFLOW_TRACKING_URI
 from femto_rul.features.prefix import prefix_feature_columns
+from femto_rul.serving.telemetry import log_prediction
 
 
 logging.basicConfig(level=logging.INFO)
@@ -225,6 +228,21 @@ def model_info():
     }
 
 
+def _log_prediction_safely(**kwargs) -> None:
+    """Best-effort telemetry write (Phase 16) — never let a logging failure
+    fail the prediction response."""
+    try:
+        log_prediction(
+            model_name=MODEL_NAME,
+            model_alias=MODEL_ALIAS,
+            model_version=str(model_state["version"]),
+            feature_set_version="prefix_v1",
+            **kwargs,
+        )
+    except Exception:
+        logger.exception("prediction logging failed")
+
+
 @app.post("/predict", response_model=RULPrediction)
 def predict(features: BearingFeatures):
     """
@@ -240,9 +258,11 @@ def predict(features: BearingFeatures):
             detail="Model not loaded",
         )
 
-    try:
-        payload = features.model_dump()
+    request_id = str(uuid.uuid4())
+    payload = features.model_dump()
+    start = time.perf_counter()
 
+    try:
         # Explicit feature ordering protects inference from request-key order.
         input_df = pd.DataFrame(
             [[payload[name] for name in EXPECTED_FEATURES]],
@@ -260,10 +280,28 @@ def predict(features: BearingFeatures):
     except Exception as exc:
         logger.exception("Prediction failed")
 
+        _log_prediction_safely(
+            request_id=request_id,
+            features=None,
+            predicted_rul_seconds=None,
+            latency_ms=(time.perf_counter() - start) * 1000,
+            status="error",
+            error_message=str(exc),
+        )
+
         raise HTTPException(
             status_code=500,
             detail="Prediction failed",
         ) from exc
+
+    _log_prediction_safely(
+        request_id=request_id,
+        features=payload,
+        predicted_rul_seconds=predicted_value,
+        latency_ms=(time.perf_counter() - start) * 1000,
+        status="ok",
+        error_message=None,
+    )
 
     return RULPrediction(
         predicted_rul_seconds=predicted_value,

@@ -1,0 +1,86 @@
+{
+  "observed_age_seconds": {
+    "p01": 2247.5,
+    "p99": 25636.000000000007
+  },
+  "rotation_speed_rpm": {
+    "p01": 1500.0,
+    "p99": 1800.0
+  },
+  "radial_load_n": {
+    "p01": 4000.0,
+    "p99": 5000.0
+  },
+  "rms_horiz_current_over_early": {
+    "p01": 0.5509433861066461,
+    "p99": 2.7103763196874926
+  },
+  "rms_horiz_recent_mean_over_early": {
+    "p01": 0.5976771122993308,
+    "p99": 2.517688133597398
+  },
+  "rms_horiz_recent_slope_per_hour": {
+    "p01": -0.772412645311189,
+    "p99": 1.1669908667714477
+  },
+  "rms_vert_current_over_early": {
+    "p01": 0.7299727917959514,
+    "p99": 4.263963862674751
+  },
+  "rms_vert_recent_mean_over_early": {
+    "p01": 0.731832552108667,
+    "p99": 4.006517981003879
+  },
+  "rms_vert_recent_slope_per_hour": {
+    "p01": -1.9701886342890451,
+    "p99": 1.6018155300027803
+  },
+  "kurtosis_horiz_current_over_early": {
+    "p01": 0.09149398478459592,
+    "p99": 891.4159767514218
+  },
+  "kurtosis_horiz_recent_mean_over_early": {
+    "p01": 2.5274054607005683,
+    "p99": 184.89715652227017
+  },
+  "kurtosis_horiz_recent_slope_per_hour": {
+    "p01": -74.33640131449734,
+    "p99": 85.74000564207516
+  },
+  "kurtosis_vert_current_over_early": {
+    "p01": -36.18462577308822,
+    "p99": 9983.34305611215
+  },
+  "kurtosis_vert_recent_mean_over_early": {
+    "p01": -1.698136343526051,
+    "p99": 8218.902514791913
+  },
+  "kurtosis_vert_recent_slope_per_hour": {
+    "p01": -259.4996520898843,
+    "p99": 277.5084995283219
+  },
+  "crest_factor_horiz_current_over_early": {
+    "p01": 0.8460797369100654,
+    "p99": 4.704448602541517
+  },
+  "crest_factor_horiz_recent_mean_over_early": {
+    "p01": 0.9796522008254033,
+    "p99": 2.33460414100606
+  },
+  "crest_factor_horiz_recent_slope_per_hour": {
+    "p01": -17.509721756906426,
+    "p99": 26.53916794867368
+  },
+  "crest_factor_vert_current_over_early": {
+    "p01": 0.8378114095751725,
+    "p99": 6.2140410453021495
+  },
+  "crest_factor_vert_recent_mean_over_early": {
+    "p01": 0.9647547347051186,
+    "p99": 2.843132584288457
+  },
+  "crest_factor_vert_recent_slope_per_hour": {
+    "p01": -31.970553425062356,
+    "p99": 36.51223759576463
+  }
+}
