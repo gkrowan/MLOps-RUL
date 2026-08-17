@@ -180,6 +180,7 @@ FEATURE_SCHEMA_PATH: Final[Path] = (
 AIRFLOW_BASE_URL: Final[str | None] = env("AIRFLOW_BASE_URL")
 MLFLOW_TRACKING_URI: Final[str | None] = env("MLFLOW_TRACKING_URI")
 GRAFANA_BASE_URL: Final[str | None] = env("GRAFANA_BASE_URL")
+API_BASE_URL: Final[str | None] = env("API_BASE_URL")
 
 # MinIO S3-compatible API used by DVC and object-storage clients.
 MINIO_ENDPOINT_URL: Final[str | None] = env("MINIO_ENDPOINT_URL")

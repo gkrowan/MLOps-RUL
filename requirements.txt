@@ -35,5 +35,9 @@ fastapi==0.141.1
 uvicorn==0.52.3
 pydantic==2.13.4
 
+# scripts/simulate_drift.py (Phase 18) — real HTTP requests to the live
+# /predict endpoint, not the in-process TestClient the API tests use.
+requests==2.34.2
+
 # install this repo's own package (src/femto_rul) in editable mode
 -e .
