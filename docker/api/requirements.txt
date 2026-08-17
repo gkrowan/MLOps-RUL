@@ -8,3 +8,7 @@ mlflow-skinny==3.1.4
 pandas==3.0.5
 psycopg2-binary==2.9.10
 boto3==1.39.3
+# register_finalists.py logs every finalist (baseline and candidate alike)
+# via the mlflow.sklearn flavor, so loading any registered model at serve
+# time needs scikit-learn regardless of which alias is promoted to champion.
+scikit-learn==1.9.0
