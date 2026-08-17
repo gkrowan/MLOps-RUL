@@ -6,8 +6,9 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 
-from airflow.decorators import dag, get_current_context, task
+from airflow.decorators import dag, task
 from airflow.models.param import Param
+from airflow.operators.python import get_current_context
 
 
 @dag(

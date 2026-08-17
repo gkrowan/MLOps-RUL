@@ -51,12 +51,18 @@ jobs:
           printf '%s\n' "$OCI_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Create application directory
+      - name: Create writable application directories
         env:
           OCI_HOST: ${{ secrets.OCI_HOST }}
           OCI_USER: ${{ secrets.OCI_USER }}
           OCI_DEPLOY_PATH: ${{ secrets.OCI_DEPLOY_PATH }}
-        run: ssh -i ~/.ssh/id_oci "$OCI_USER@$OCI_HOST" "mkdir -p '$OCI_DEPLOY_PATH'"
+        run: |
+          ssh -i ~/.ssh/id_oci "$OCI_USER@$OCI_HOST" \
+            "mkdir -p \
+              '$OCI_DEPLOY_PATH/airflow/logs' \
+              '$OCI_DEPLOY_PATH/artifacts' \
+              '$OCI_DEPLOY_PATH/data/airflow_pipeline' \
+              '$OCI_DEPLOY_PATH/data/processed'"
 
       - name: Upload tested source
         env:
