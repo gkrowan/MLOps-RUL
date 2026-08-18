@@ -138,6 +138,27 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      API_MODEL_NAME: ${API_MODEL_NAME:-femto-rul-model}
+      API_MODEL_REFERENCE: ${API_MODEL_REFERENCE:-latest}
+      API_KEY: ${API_KEY:-}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:8000:8000"
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
   grafana:
     image: grafana/grafana:12.0.2
     environment:

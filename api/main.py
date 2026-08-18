@@ -1,274 +1,106 @@
-"""
-FastAPI service for serving the FEMTO bearing RUL champion model.
+"""FastAPI application serving the registered FEMTO RUL model."""
 
-The service loads the current MLflow Model Registry alias (default: champion)
-once at startup and exposes real-time RUL inference.
+from __future__ import annotations
 
-Input:
-    Prefix V1 pre-extracted features used by the registered model.
-    Raw vibration signals are NOT accepted by this endpoint.
-
-Run locally from the repository root:
-    uvicorn api.main:app --reload --port 8000
-
-Existing environment variables reused:
-    MLFLOW_TRACKING_URI
-    MLFLOW_MODEL_NAME
-    MODEL_NAME
-    MODEL_ALIAS
-    MINIO_ENDPOINT_URL
-    MINIO_ROOT_USER
-    MINIO_ROOT_PASSWORD
-
-No .env change is required for the current local setup.
-"""
-
-import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Annotated
 
-import mlflow
-import mlflow.pyfunc
-import pandas as pd
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ConfigDict, create_model
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 
-# Importing project config also preserves the project's existing .env loading.
-from femto_rul.config import MLFLOW_MODEL_NAME, MLFLOW_TRACKING_URI
-from femto_rul.features.prefix import prefix_feature_columns
+from api.model_loader import ModelService
+from api.schemas import HealthResponse, PredictionRequest, PredictionResponse
 
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("femto-rul-api")
-
-
-# -----------------------------------------------------------------------------
-# Runtime configuration
-# -----------------------------------------------------------------------------
-
-MODEL_NAME = os.getenv(
-    "MODEL_NAME",
-    os.getenv("MLFLOW_MODEL_NAME", MLFLOW_MODEL_NAME),
-)
-
-MODEL_ALIAS = os.getenv(
-    "MODEL_ALIAS",
-    "champion",
-)
-
-# Reuse the project's existing MinIO variables for MLflow's S3-compatible
-# artifact client. setdefault() preserves explicitly supplied AWS/MLflow vars.
-MINIO_ENDPOINT_URL = os.getenv(
-    "MINIO_ENDPOINT_URL",
-    "http://localhost:9000",
-)
-
-os.environ.setdefault(
-    "MLFLOW_S3_ENDPOINT_URL",
-    MINIO_ENDPOINT_URL,
-)
-
-if os.getenv("MINIO_ROOT_USER"):
-    os.environ.setdefault(
-        "AWS_ACCESS_KEY_ID",
-        os.environ["MINIO_ROOT_USER"],
+def _load_service() -> ModelService:
+    return ModelService.load(
+        tracking_uri=os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000"),
+        model_name=os.getenv("API_MODEL_NAME", "femto-rul-model"),
+        reference=os.getenv("API_MODEL_REFERENCE", "latest"),
     )
 
-if os.getenv("MINIO_ROOT_PASSWORD"):
-    os.environ.setdefault(
-        "AWS_SECRET_ACCESS_KEY",
-        os.environ["MINIO_ROOT_PASSWORD"],
-    )
-
-
-# -----------------------------------------------------------------------------
-# Model state
-# -----------------------------------------------------------------------------
-
-model_state = {
-    "model": None,
-    "version": None,
-    "run_id": None,
-    "model_uri": None,
-}
-
-
-# -----------------------------------------------------------------------------
-# Model lifecycle
-# -----------------------------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load the registered champion once when the API starts."""
-
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    client = mlflow.MlflowClient()
-
-    model_uri = f"models:/{MODEL_NAME}@{MODEL_ALIAS}"
-
-    logger.info("Loading model from %s", model_uri)
-
     try:
-        model = mlflow.pyfunc.load_model(model_uri)
-
-        model_version = client.get_model_version_by_alias(
-            MODEL_NAME,
-            MODEL_ALIAS,
-        )
-
-        model_state["model"] = model
-        model_state["version"] = model_version.version
-        model_state["run_id"] = model_version.run_id
-        model_state["model_uri"] = model_uri
-
-        logger.info(
-            "Loaded model=%s version=%s alias=%s",
-            MODEL_NAME,
-            model_version.version,
-            MODEL_ALIAS,
-        )
-
-    except Exception:
-        logger.exception(
-            "Failed to load MLflow model %s",
-            model_uri,
-        )
-        raise
-
+        app.state.model_service = _load_service()
+        app.state.model_load_error = None
+    except Exception as error:  # keep diagnostics reachable when MLflow is unavailable
+        app.state.model_service = None
+        app.state.model_load_error = f"{type(error).__name__}: {error}"
     yield
 
-    model_state["model"] = None
-
-
-# -----------------------------------------------------------------------------
-# FastAPI app
-# -----------------------------------------------------------------------------
 
 app = FastAPI(
-    title="FEMTO Bearing RUL Prediction API",
-    description=(
-        "Serves Remaining Useful Life predictions using the "
-        "registered MLflow champion model."
-    ),
+    title="FEMTO RUL Inference API",
     version="1.0.0",
     lifespan=lifespan,
 )
 
 
-# -----------------------------------------------------------------------------
-# Request / response schemas
-# -----------------------------------------------------------------------------
-
-# The API contract comes directly from the production Prefix V1 feature
-# definition used by the registered model. This prevents a second hard-coded
-# feature list from drifting away from training.
-EXPECTED_FEATURES = prefix_feature_columns()
-
-BearingFeatures = create_model(
-    "BearingFeatures",
-    __config__=ConfigDict(extra="forbid"),
-    **{
-        feature_name: (float, ...)
-        for feature_name in EXPECTED_FEATURES
-    },
-)
+def require_api_key(
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> None:
+    configured_key = os.getenv("API_KEY", "")
+    if configured_key and (
+        x_api_key is None or not secrets.compare_digest(x_api_key, configured_key)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid API key",
+        )
 
 
-class RULPrediction(BaseModel):
-    predicted_rul_seconds: float
-    model_name: str
-    model_alias: str
-    model_version: Optional[str]
-    model_run_id: Optional[str]
+def get_model_service(request: Request) -> ModelService:
+    service = request.app.state.model_service
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=request.app.state.model_load_error or "Model is not loaded",
+        )
+    return service
 
-
-class HealthResponse(BaseModel):
-    status: str
-    model_loaded: bool
-
-
-# -----------------------------------------------------------------------------
-# Routes
-# -----------------------------------------------------------------------------
 
 @app.get("/health", response_model=HealthResponse)
-def health():
-    """Liveness/readiness endpoint."""
-
-    loaded = model_state["model"] is not None
-
-    return HealthResponse(
-        status="ok" if loaded else "not_ready",
-        model_loaded=loaded,
-    )
-
-
-@app.get("/model-info")
-def model_info():
-    """Return metadata for the registered model currently being served."""
-
-    if model_state["model"] is None:
+def health(request: Request) -> HealthResponse:
+    service = request.app.state.model_service
+    if service is None:
         raise HTTPException(
-            status_code=503,
-            detail="Model not loaded",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=HealthResponse(
+                status="unhealthy",
+                model_loaded=False,
+                detail=request.app.state.model_load_error,
+            ).model_dump(),
         )
-
-    return {
-        "model_name": MODEL_NAME,
-        "alias": MODEL_ALIAS,
-        "version": model_state["version"],
-        "run_id": model_state["run_id"],
-        "model_uri": model_state["model_uri"],
-        "feature_count": len(EXPECTED_FEATURES),
-        "features": EXPECTED_FEATURES,
-    }
+    return HealthResponse(status="healthy", model_loaded=True)
 
 
-@app.post("/predict", response_model=RULPrediction)
-def predict(features: BearingFeatures):
-    """
-    Predict Remaining Useful Life in seconds.
+@app.get("/model-info", dependencies=[Depends(require_api_key)])
+def model_info(service: Annotated[ModelService, Depends(get_model_service)]):
+    return service.info()
 
-    The request must contain the exact Prefix V1 feature set expected by the
-    registered model. Missing or additional fields are rejected by Pydantic.
-    """
 
-    if model_state["model"] is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Model not loaded",
-        )
-
+@app.post(
+    "/predict",
+    response_model=PredictionResponse,
+    dependencies=[Depends(require_api_key)],
+)
+def predict(
+    payload: PredictionRequest,
+    service: Annotated[ModelService, Depends(get_model_service)],
+) -> PredictionResponse:
     try:
-        payload = features.model_dump()
-
-        # Explicit feature ordering protects inference from request-key order.
-        input_df = pd.DataFrame(
-            [[payload[name] for name in EXPECTED_FEATURES]],
-            columns=EXPECTED_FEATURES,
-        )
-
-        prediction = model_state["model"].predict(input_df)
-
-        # RUL cannot be negative.
-        predicted_value = max(
-            0.0,
-            float(prediction[0]),
-        )
-
-    except Exception as exc:
-        logger.exception("Prediction failed")
-
+        prediction = service.predict(payload.features)
+    except ValueError as error:
         raise HTTPException(
-            status_code=500,
-            detail="Prediction failed",
-        ) from exc
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from error
 
-    return RULPrediction(
-        predicted_rul_seconds=predicted_value,
-        model_name=MODEL_NAME,
-        model_alias=MODEL_ALIAS,
-        model_version=model_state["version"],
-        model_run_id=model_state["run_id"],
+    return PredictionResponse(
+        predicted_rul_seconds=prediction,
+        model_name=service.model_name,
+        model_version=service.version,
+        model_reference=service.reference,
     )

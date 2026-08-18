@@ -48,6 +48,13 @@ services:
           cpus: "2.0"
           memory: 2G
 
+  api:
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
   grafana:
     environment:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
