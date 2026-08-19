@@ -17,7 +17,7 @@ from airflow.operators.python import get_current_context
 @dag(
     dag_id="femto_validation_api_inference",
     description="Build validation prefixes and send them through the prediction API.",
-    schedule=None,
+    schedule="@hourly",
     start_date=datetime(2026, 8, 1, tzinfo=timezone.utc),
     catchup=False,
     max_active_runs=1,
